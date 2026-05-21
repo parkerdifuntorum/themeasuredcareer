@@ -1,0 +1,64 @@
+
+.results-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 18px;
+  align-items: flex-start;
+}
+
+.compact-button {
+  width: auto;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
+}
+
+.secondary-button {
+  border: 1px solid #d5dbea;
+  border-radius: 14px;
+  padding: 13px 16px;
+  margin-top: 16px;
+  background: white;
+  color: #172033;
+  font-weight: 800;
+  cursor: pointer;
+}
+
+.removable-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.job-description {
+  margin-top: 12px !important;
+  color: #344054 !important;
+  line-height: 1.5;
+  max-width: 720px;
+}
+
+.apply-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin-top: 8px;
+  color: #172033;
+  font-weight: 800;
+  text-decoration: none;
+}
+
+.apply-link:hover {
+  text-decoration: underline;
+}
+
+@media (max-width: 760px) {
+  .results-header {
+    flex-direction: column;
+  }
+
+  .compact-button {
+    width: 100%;
+    justify-content: center;
+  }
+}

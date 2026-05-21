@@ -10,6 +10,7 @@ import {
   Wand2,
   X,
   Search,
+  ExternalLink,
 } from "lucide-react";
 
 import "./styles.css";
@@ -41,64 +42,81 @@ const industries = [
 const modalities = ["Remote", "Hybrid", "On-site"];
 
 const fallbackRecommendedTitles = [
-  "Power Systems Engineer",
-  "SCADA Engineer",
-  "Data Engineer",
-  "AI Engineer",
-  "Cybersecurity Engineer",
-  "Energy Market Analyst",
+  "Data Analyst",
+  "Software Engineer",
+  "Project Manager",
+  "Business Analyst",
+  "Product Manager",
+  "Research Analyst",
+  "Operations Manager",
+  "Cybersecurity Analyst",
 ];
 
 const starterJobs = [
   {
-    title: "Senior Power Systems Data Engineer",
-    company: "Grid Analytics Co.",
-    compensation: 165000,
+    title: "Data Analyst",
+    company: "Business Intelligence Group",
+    compensation: 112000,
     modality: "Remote",
-    industry: "Utilities / Energy",
-    location: "Sacramento, CA",
-    skillMatch: 94,
-    source: "Starter Result",
-  },
-  {
-    title: "Distribution Planning Engineer",
-    company: "Regional Utility",
-    compensation: 142000,
-    modality: "Hybrid",
-    industry: "Engineering",
-    location: "South Lake Tahoe, CA",
+    industry: "Data / AI",
+    location: "Remote",
     skillMatch: 88,
     source: "Starter Result",
+    description:
+      "Analyze business performance data, build dashboards, write SQL queries, and translate operational data into decision-ready insights.",
+    applyUrl: "https://themeasuredcareer.com/jobs/data-analyst",
   },
   {
-    title: "Market Risk Data Analyst",
-    company: "Energy Market Operator",
+    title: "Software Engineer",
+    company: "Cloud Applications Co.",
     compensation: 155000,
+    modality: "Hybrid",
+    industry: "Software",
+    location: "Sacramento, CA",
+    skillMatch: 84,
+    source: "Starter Result",
+    description:
+      "Develop full-stack application features, integrate APIs, improve platform reliability, and collaborate with product and design teams.",
+    applyUrl: "https://themeasuredcareer.com/jobs/software-engineer",
+  },
+  {
+    title: "Healthcare Data Analyst",
+    company: "Health Systems Analytics",
+    compensation: 118000,
+    modality: "Remote",
+    industry: "Healthcare",
+    location: "Remote",
+    skillMatch: 86,
+    source: "Starter Result",
+    description:
+      "Work with clinical, claims, and operational datasets to support reporting, population health analysis, and healthcare process improvement.",
+    applyUrl: "https://themeasuredcareer.com/jobs/healthcare-data-analyst",
+  },
+  {
+    title: "Financial Analyst",
+    company: "Capital Planning Partners",
+    compensation: 105000,
     modality: "Hybrid",
     industry: "Finance",
     location: "Folsom, CA",
-    skillMatch: 84,
+    skillMatch: 82,
     source: "Starter Result",
+    description:
+      "Support budgeting, forecasting, financial modeling, variance analysis, and executive reporting for strategic planning teams.",
+    applyUrl: "https://themeasuredcareer.com/jobs/financial-analyst",
   },
   {
-    title: "OT Cybersecurity Engineer",
-    company: "Critical Infrastructure Security Lab",
-    compensation: 172000,
-    modality: "Remote",
-    industry: "Cybersecurity",
-    location: "Remote",
-    skillMatch: 90,
-    source: "Starter Result",
-  },
-  {
-    title: "EMS Applications Engineer",
-    company: "Transmission Operations Platform",
-    compensation: 158000,
+    title: "Research Engineer",
+    company: "Applied Research Lab",
+    compensation: 132000,
     modality: "Hybrid",
-    industry: "Utilities / Energy",
-    location: "Rocklin, CA",
-    skillMatch: 96,
+    industry: "Research",
+    location: "Davis, CA",
+    skillMatch: 89,
     source: "Starter Result",
+    description:
+      "Design experiments, build prototypes, analyze technical results, and support applied research projects across engineering domains.",
+    applyUrl: "https://themeasuredcareer.com/jobs/research-engineer",
   },
 ];
 
@@ -124,8 +142,8 @@ function App() {
   const [preferences, setPreferences] = useState({
     targetTitle: "",
     selectedTitles: [],
-    minSalary: "",
-    maxSalary: "",
+    minSalary: "$90,000",
+    maxSalary: "$170,000",
     modalities: [],
     industry: "Any",
     location: "",
@@ -298,36 +316,6 @@ function App() {
     }
   }
 
-  async function sendDigest() {
-    if (!emailIsValid(digestEmail)) {
-      setDigestStatus("Please enter a valid email address.");
-      return;
-    }
-
-    try {
-      const response = await fetch("/api/send-digest", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: digestEmail,
-          preferences,
-          recommendedTitles: titleIntelligence.recommendedTitles,
-          jobs: rankedJobs.slice(0, 10),
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Failed to send digest");
-      }
-
-      setDigestStatus("Digest sent successfully.");
-    } catch (error) {
-      setDigestStatus("Failed to send digest.");
-    }
-  }
-
   const rankedJobs = useMemo(() => {
     const minSalary = parseSalary(preferences.minSalary);
     const maxSalary = parseSalary(preferences.maxSalary);
@@ -409,6 +397,37 @@ function App() {
       .sort((a, b) => b.score - a.score);
   }, [jobs, preferences, weights, titleIntelligence]);
 
+  async function sendDigest() {
+    if (!emailIsValid(digestEmail)) {
+      setDigestStatus("Please enter a valid email address.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/send-digest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: digestEmail,
+          preferences,
+          recommendedTitles: titleIntelligence.recommendedTitles,
+          jobs: rankedJobs.slice(0, 10),
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "Failed to send digest");
+      }
+
+      setDigestStatus("Digest sent successfully with ranked jobs.");
+    } catch (error) {
+      setDigestStatus(`Failed to send digest: ${error.message}`);
+    }
+  }
+
   return (
     <main className="page">
       <section className="hero">
@@ -455,7 +474,7 @@ function App() {
           <input
             id="target-title"
             type="text"
-            placeholder="Example: EMS Engineer, Data Engineer, Grid Cybersecurity"
+            placeholder="Example: Data Analyst, Project Manager, Nurse, Research Scientist"
             value={preferences.targetTitle}
             onChange={(event) =>
               setPreferences({
@@ -545,7 +564,7 @@ function App() {
               <label htmlFor="min-salary">Minimum Salary</label>
               <input
                 id="min-salary"
-                placeholder="$120,000"
+                placeholder="$90,000"
                 value={preferences.minSalary}
                 onChange={(event) =>
                   setPreferences({
@@ -560,7 +579,7 @@ function App() {
               <label htmlFor="max-salary">Maximum Salary</label>
               <input
                 id="max-salary"
-                placeholder="$180,000"
+                placeholder="$170,000"
                 value={preferences.maxSalary}
                 onChange={(event) =>
                   setPreferences({
@@ -704,6 +723,17 @@ function App() {
                 <p>{job.company}</p>
                 <span>{job.industry}</span>
                 {job.source && <span>{job.source}</span>}
+                {job.description && <p className="job-description">{job.description}</p>}
+                {job.applyUrl && (
+                  <a
+                    className="apply-link"
+                    href={job.applyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
+                    Apply Now <ExternalLink size={14} />
+                  </a>
+                )}
               </div>
 
               <div className="job-meta">

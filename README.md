@@ -1,23 +1,20 @@
-# Run Search Update
+# Ranked Email + Job Descriptions + Apply Links Update
 
 Replace/add these files:
 
 - `src/App.jsx`
 - `api/search-jobs.js`
-- `package.json` if your dependencies are missing `openai` or `resend`
+- `api/send-digest.js`
 
-This update adds:
+Also append the contents of:
 
-- Multiple selected recommended titles
-- Run Search button
-- `/api/search-jobs` Vercel serverless endpoint
-- OpenAI embedding search over a starter job catalog
-- Updated rankings when new results return
-- Automatic re-ranking when preferences or optimization weights change
+- `src/styles-additions.css`
 
-Required Vercel env vars:
+to your existing:
 
-```text
-OPENAI_API_KEY
-RESEND_API_KEY
-```
+- `src/styles.css`
+
+Changes:
+- Ranked jobs displayed on the website include descriptions.
+- Ranked jobs include clickable Apply Now links.
+- Email digest now includes the ranked jobs, match scores, descriptions, salary, modality, location, and apply links.

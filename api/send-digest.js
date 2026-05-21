@@ -2,6 +2,59 @@ import { Resend } from "resend";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
+function escapeHtml(value = "") {
+  return String(value)
+    .replaceAll("&", "&amp;")
+    .replaceAll("<", "&lt;")
+    .replaceAll(">", "&gt;")
+    .replaceAll('"', "&quot;")
+    .replaceAll("'", "&#039;");
+}
+
+function formatMoney(value) {
+  if (!Number.isFinite(Number(value))) return "Not listed";
+  return `$${Number(value).toLocaleString()}`;
+}
+
+function renderJobRows(jobs = []) {
+  if (!jobs.length) {
+    return `
+      <p style="color:#667085;">No ranked jobs were included. Run a search first, then send the digest again.</p>
+    `;
+  }
+
+  return jobs
+    .map((job, index) => {
+      const safeTitle = escapeHtml(job.title);
+      const safeCompany = escapeHtml(job.company);
+      const safeIndustry = escapeHtml(job.industry);
+      const safeModality = escapeHtml(job.modality);
+      const safeLocation = escapeHtml(job.location);
+      const safeDescription = escapeHtml(job.description || "No description provided.");
+      const safeApplyUrl = escapeHtml(job.applyUrl || "https://themeasuredcareer.com");
+
+      return `
+        <tr>
+          <td style="padding:18px;border-bottom:1px solid #e5e7eb;">
+            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#667085;font-weight:700;">
+              Rank #${index + 1} · Match Score ${job.score ?? "N/A"}/100
+            </div>
+            <h2 style="margin:6px 0 4px;font-size:18px;color:#172033;">${safeTitle}</h2>
+            <p style="margin:0 0 8px;color:#475467;font-weight:700;">${safeCompany}</p>
+            <p style="margin:0 0 8px;color:#667085;">
+              ${formatMoney(job.compensation)} · ${safeModality} · ${safeLocation} · ${safeIndustry}
+            </p>
+            <p style="margin:0 0 12px;color:#344054;line-height:1.5;">${safeDescription}</p>
+            <a href="${safeApplyUrl}" style="display:inline-block;background:#172033;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700;">
+              Apply Now
+            </a>
+          </td>
+        </tr>
+      `;
+    })
+    .join("");
+}
+
 export default async function handler(req, res) {
   if (req.method !== "POST") {
     return res.status(405).json({
@@ -16,7 +69,12 @@ export default async function handler(req, res) {
   }
 
   try {
-    const { email, preferences = {}, recommendedTitles = [] } = req.body;
+    const {
+      email,
+      preferences = {},
+      recommendedTitles = [],
+      jobs = [],
+    } = req.body;
 
     if (!email) {
       return res.status(400).json({
@@ -24,17 +82,35 @@ export default async function handler(req, res) {
       });
     }
 
-    const title = preferences.targetTitle || "your selected job preferences";
+    const selectedTitles = preferences.selectedTitles || [];
+    const targetTitle =
+      selectedTitles.length > 0
+        ? selectedTitles.join(", ")
+        : preferences.targetTitle || "your selected job preferences";
 
     const response = await resend.emails.send({
       from: "digest@themeasuredcareer.com",
       to: email,
-      subject: "Your Job Search Smarter Digest",
+      subject: "Your Job Search Smarter Ranked Jobs Digest",
       html: `
-        <h1>Your Job Search Smarter Digest</h1>
-        <p>Your latest ranked jobs are ready.</p>
-        <p><strong>Target title:</strong> ${title}</p>
-        <p><strong>Related titles:</strong> ${recommendedTitles.join(", ")}</p>
+        <div style="background:#f5f7fb;padding:24px;font-family:Arial,sans-serif;">
+          <div style="max-width:760px;margin:0 auto;background:#ffffff;border-radius:18px;overflow:hidden;border:1px solid #e5e7eb;">
+            <div style="background:#172033;color:#ffffff;padding:28px;">
+              <p style="margin:0 0 8px;text-transform:uppercase;letter-spacing:.12em;font-size:12px;font-weight:700;">Job Search Smarter</p>
+              <h1 style="margin:0;font-size:28px;">Your Ranked Jobs Digest</h1>
+              <p style="margin:10px 0 0;color:#d0d5dd;">Ranked opportunities based on your selected preferences.</p>
+            </div>
+
+            <div style="padding:22px;">
+              <p style="margin:0 0 8px;"><strong>Target titles:</strong> ${escapeHtml(targetTitle)}</p>
+              <p style="margin:0 0 18px;"><strong>Recommended related titles:</strong> ${escapeHtml(recommendedTitles.join(", ") || "None selected")}</p>
+
+              <table style="width:100%;border-collapse:collapse;">
+                ${renderJobRows(jobs)}
+              </table>
+            </div>
+          </div>
+        </div>
       `,
     });
 
