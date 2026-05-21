@@ -60,56 +60,7 @@ const fallbackRecommendedTitles = [
   "Financial Analyst",
 ];
 
-const starterJobs = [
-  {
-    title: "Data Analyst",
-    company: "Business Intelligence Group",
-    compensation: 112000,
-    modality: "Remote",
-    industry: "Data / AI",
-    location: "Remote",
-    skillMatch: 88,
-    travel: "Minimal",
-    travelPercent: 0,
-    companyScore: 75,
-    source: "Starter Result",
-    description:
-      "Analyze business performance data, build dashboards, write SQL queries, and translate operational data into decision-ready insights.",
-    applyUrl: "https://themeasuredcareer.com",
-  },
-  {
-    title: "Software Engineer",
-    company: "Cloud Applications Co.",
-    compensation: 155000,
-    modality: "Hybrid",
-    industry: "Software",
-    location: "Sacramento, CA",
-    skillMatch: 84,
-    travel: "Minimal",
-    travelPercent: 5,
-    companyScore: 75,
-    source: "Starter Result",
-    description:
-      "Develop full-stack application features, integrate APIs, improve platform reliability, and collaborate with product and design teams.",
-    applyUrl: "https://themeasuredcareer.com",
-  },
-  {
-    title: "Healthcare Data Analyst",
-    company: "Health Systems Analytics",
-    compensation: 118000,
-    modality: "Remote",
-    industry: "Healthcare",
-    location: "Remote",
-    skillMatch: 86,
-    travel: "Minimal",
-    travelPercent: 0,
-    companyScore: 75,
-    source: "Starter Result",
-    description:
-      "Work with clinical, claims, and operational datasets to support reporting, population health analysis, and healthcare process improvement.",
-    applyUrl: "https://themeasuredcareer.com",
-  },
-];
+const starterJobs = [];
 
 function emailIsValid(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
@@ -123,13 +74,22 @@ function getErrorMessage(data, fallback) {
   return JSON.stringify(data);
 }
 
+function hasRealApplyUrl(job) {
+  return (
+    job?.applyUrl &&
+    typeof job.applyUrl === "string" &&
+    job.applyUrl.startsWith("http") &&
+    !job.applyUrl.includes("themeasuredcareer.com")
+  );
+}
+
 function App() {
   const [digestEmail, setDigestEmail] = useState("");
   const [emailVerifyStatus, setEmailVerifyStatus] = useState("");
   const [digestStatus, setDigestStatus] = useState("");
   const [subscribeStatus, setSubscribeStatus] = useState("");
   const [titleStatus, setTitleStatus] = useState("");
-  const [searchStatus, setSearchStatus] = useState("");
+  const [searchStatus, setSearchStatus] = useState("Run a search to retrieve and rank live job results.");
 
   const [jobs, setJobs] = useState(starterJobs);
   const [lastSearchMeta, setLastSearchMeta] = useState(null);
@@ -697,7 +657,7 @@ function App() {
           <input
             id="preferred-companies"
             type="text"
-            placeholder="Example: OpenAI, CAISO, Google, Microsoft"
+            placeholder="Example: OpenAI, Google, Microsoft"
             value={preferences.preferredCompanies}
             onChange={(event) =>
               setPreferences({
@@ -815,8 +775,7 @@ function App() {
           <div>
             <h2>Ranked Jobs</h2>
             <p className="helper">
-              Results update after each search and automatically re-rank when
-              preferences or weights change.
+              Only live retrieved jobs are shown. Apply buttons only appear when a real external application link is available.
               {lastSearchMeta?.sources?.length
                 ? ` Sources: ${lastSearchMeta.sources.join(", ")}.`
                 : ""}
@@ -835,7 +794,7 @@ function App() {
           {rankedJobs.map((job) => (
             <article
               className="job-card"
-              key={`${job.source}-${job.company}-${job.title}-${job.applyUrl}`}
+              key={`${job.source}-${job.company}-${job.title}-${job.applyUrl || job.description || job.score}`}
             >
               <div>
                 <h3>{job.title}</h3>
@@ -849,7 +808,7 @@ function App() {
                 {job.description && (
                   <p className="job-description">{job.description}</p>
                 )}
-                {job.applyUrl && (
+                {hasRealApplyUrl(job) && (
                   <a
                     className="apply-link"
                     href={job.applyUrl}

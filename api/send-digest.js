@@ -38,6 +38,24 @@ function formatMoney(value) {
   return `$${Number(value).toLocaleString()}`;
 }
 
+function hasRealApplyUrl(job) {
+  return (
+    job?.applyUrl &&
+    typeof job.applyUrl === "string" &&
+    job.applyUrl.startsWith("http") &&
+    !job.applyUrl.includes("themeasuredcareer.com")
+  );
+}
+
+function renderApplyButton(job) {
+  if (!hasRealApplyUrl(job)) return "";
+  return `
+    <a href="${escapeHtml(job.applyUrl)}" style="display:inline-block;background:#172033;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700;">
+      Apply Now
+    </a>
+  `;
+}
+
 function renderJobRows(jobs = []) {
   if (!jobs.length) {
     return `<p style="color:#667085;">No ranked jobs were included. Run a search first, then send the digest again.</p>`;
@@ -55,9 +73,7 @@ function renderJobRows(jobs = []) {
           ${formatMoney(job.compensation)} · ${escapeHtml(job.modality || "Not listed")} · ${escapeHtml(job.location || "Not listed")} · ${escapeHtml(job.industry || "General")}
         </p>
         <p style="margin:0 0 12px;color:#344054;line-height:1.5;">${escapeHtml(job.description || "No description provided.")}</p>
-        <a href="${escapeHtml(job.applyUrl || "https://themeasuredcareer.com")}" style="display:inline-block;background:#172033;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700;">
-          Apply Now
-        </a>
+            ${renderApplyButton(job)}
       </td>
     </tr>
   `).join("");
@@ -112,6 +128,7 @@ export default async function handler(req, res) {
             <div style="padding:22px;">
               <p style="margin:0 0 8px;"><strong>Target titles:</strong> ${escapeHtml(targetTitle)}</p>
               <p style="margin:0 0 18px;"><strong>Recommended related titles:</strong> ${escapeHtml(recommendedTitles.join(", ") || "None selected")}</p>
+              <p style="margin:0 0 18px;color:#667085;font-size:13px;">Apply buttons are only included when a real external application link is available.</p>
               <table style="width:100%;border-collapse:collapse;">${renderJobRows(jobs)}</table>
             </div>
           </div>

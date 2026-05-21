@@ -1,25 +1,23 @@
-# 50 Ranked Embedding Results Update
+# No Placeholder Jobs + Real Apply Links
 
 Replace/add:
 
-- `api/search-jobs.js`
+- `src/App.jsx`
 - `lib/jobRetrieval.js`
+- `api/send-digest.js`
 
-Keep your current:
-- `lib/jobRanking.js`
-
-What changed:
-- `/api/search-jobs` now returns up to 50 ranked jobs instead of 30.
-- Rankings require OpenAI embeddings through `rankJobsWithEmbeddings`.
-- Retrieval asks providers for a larger candidate pool before ranking.
-- If providers return fewer than 50, fallback supplements are added so the UI can still show 50 ranked results.
-- Response metadata includes `rankingMethod`, `retrievedCount`, `rankedCount`, and `returnedCount`.
+Changes:
+- No prepopulated jobs are shown.
+- Company name box is blank by default and does not prepopulate CAISO or any company.
+- Apply buttons only appear for real external URLs.
+- `themeasuredcareer.com` is never used as a fake apply link.
+- Email digests also hide apply buttons unless a real external apply URL exists.
 
 Deploy:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Return 50 embedding-ranked job results"
+git commit -m "Remove placeholder jobs and require real apply links"
 git push
 ```
