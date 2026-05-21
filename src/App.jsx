@@ -6,6 +6,8 @@ import {
   MapPin,
   BriefcaseBusiness,
   DollarSign,
+  Sparkles,
+  Wand2,
 } from "lucide-react";
 
 import "./styles.css";
@@ -36,6 +38,15 @@ const industries = [
 
 const modalities = ["Remote", "Hybrid", "On-site"];
 
+const fallbackRecommendedTitles = [
+  "Power Systems Engineer",
+  "SCADA Engineer",
+  "Data Engineer",
+  "AI Engineer",
+  "Cybersecurity Engineer",
+  "Energy Market Analyst",
+];
+
 const sampleJobs = [
   {
     title: "Senior Power Systems Data Engineer",
@@ -44,7 +55,6 @@ const sampleJobs = [
     modality: "Remote",
     industry: "Utilities / Energy",
     location: "Sacramento, CA",
-    titleMatch: 96,
     skillMatch: 94,
   },
   {
@@ -54,7 +64,6 @@ const sampleJobs = [
     modality: "Hybrid",
     industry: "Engineering",
     location: "South Lake Tahoe, CA",
-    titleMatch: 86,
     skillMatch: 88,
   },
   {
@@ -64,8 +73,25 @@ const sampleJobs = [
     modality: "Hybrid",
     industry: "Finance",
     location: "Folsom, CA",
-    titleMatch: 78,
     skillMatch: 84,
+  },
+  {
+    title: "OT Cybersecurity Engineer",
+    company: "Critical Infrastructure Security Lab",
+    compensation: 172000,
+    modality: "Remote",
+    industry: "Cybersecurity",
+    location: "Remote",
+    skillMatch: 90,
+  },
+  {
+    title: "EMS Applications Engineer",
+    company: "Transmission Operations Platform",
+    compensation: 158000,
+    modality: "Hybrid",
+    industry: "Utilities / Energy",
+    location: "Rocklin, CA",
+    skillMatch: 96,
   },
 ];
 
@@ -83,8 +109,10 @@ function parseSalary(value) {
 function App() {
   const [digestEmail, setDigestEmail] = useState("");
   const [digestStatus, setDigestStatus] = useState("");
+  const [titleStatus, setTitleStatus] = useState("");
 
   const [preferences, setPreferences] = useState({
+    targetTitle: "",
     minSalary: "",
     maxSalary: "",
     modalities: [],
@@ -101,6 +129,14 @@ function App() {
     skillMatch: 75,
   });
 
+  const [titleIntelligence, setTitleIntelligence] = useState({
+    normalizedTitle: "",
+    confidence: 0,
+    recommendedTitles: fallbackRecommendedTitles,
+    titleScores: {},
+    source: "default",
+  });
+
   function toggleModality(modality) {
     setPreferences((current) => {
       const selected = current.modalities.includes(modality);
@@ -112,6 +148,48 @@ function App() {
           : [...current.modalities, modality],
       };
     });
+  }
+
+  async function analyzeTitleWithOpenAI() {
+    const targetTitle = preferences.targetTitle.trim();
+
+    if (!targetTitle) {
+      setTitleStatus("Enter a target job title first.");
+      return;
+    }
+
+    setTitleStatus("Analyzing title with OpenAI embeddings...");
+
+    try {
+      const response = await fetch("/api/title-match", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          targetTitle,
+          jobTitles: sampleJobs.map((job) => job.title),
+        }),
+      });
+
+      if (!response.ok) {
+        throw new Error("OpenAI title analysis failed.");
+      }
+
+      const data = await response.json();
+
+      setTitleIntelligence({
+        normalizedTitle: data.normalizedTitle,
+        confidence: data.confidence,
+        recommendedTitles: data.recommendedTitles,
+        titleScores: data.titleScores,
+        source: data.source || "openai",
+      });
+
+      setTitleStatus("OpenAI title analysis complete.");
+    } catch (error) {
+      setTitleStatus("OpenAI title analysis failed. Check OPENAI_API_KEY in Vercel.");
+    }
   }
 
   async function sendDigest() {
@@ -128,6 +206,8 @@ function App() {
         },
         body: JSON.stringify({
           email: digestEmail,
+          preferences,
+          recommendedTitles: titleIntelligence.recommendedTitles,
         }),
       });
 
@@ -144,48 +224,68 @@ function App() {
   const rankedJobs = useMemo(() => {
     const minSalary = parseSalary(preferences.minSalary);
     const maxSalary = parseSalary(preferences.maxSalary);
-    const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
+    const totalWeight =
+      Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
 
     return sampleJobs
       .map((job) => {
         let compensationScore = 75;
 
         if (minSalary && job.compensation < minSalary) {
-          compensationScore = Math.max(0, Math.round((job.compensation / minSalary) * 100));
-        } else if (minSalary && maxSalary && job.compensation >= minSalary && job.compensation <= maxSalary) {
+          compensationScore = Math.max(
+            0,
+            Math.round((job.compensation / minSalary) * 100)
+          );
+        } else if (
+          minSalary &&
+          maxSalary &&
+          job.compensation >= minSalary &&
+          job.compensation <= maxSalary
+        ) {
           compensationScore = 100;
         } else if (maxSalary && job.compensation > maxSalary) {
           compensationScore = 95;
         }
 
         const modalityScore =
-          preferences.modalities.length === 0 || preferences.modalities.includes(job.modality)
+          preferences.modalities.length === 0 ||
+          preferences.modalities.includes(job.modality)
             ? 100
             : 40;
 
         const industryScore =
-          preferences.industry === "Any" || preferences.industry === job.industry ? 100 : 45;
+          preferences.industry === "Any" || preferences.industry === job.industry
+            ? 100
+            : 45;
 
         const locationPreference = preferences.location.trim().toLowerCase();
         const locationScore =
-          !locationPreference || job.location.toLowerCase().includes(locationPreference) ? 100 : 55;
+          !locationPreference ||
+          job.location.toLowerCase().includes(locationPreference)
+            ? 100
+            : 55;
+
+        const titleMatchScore =
+          titleIntelligence.titleScores[job.title] ??
+          (preferences.targetTitle ? 50 : 75);
 
         const score =
           (compensationScore * weights.compensation +
             modalityScore * weights.modality +
             industryScore * weights.industry +
-            job.titleMatch * weights.titleMatch +
+            titleMatchScore * weights.titleMatch +
             locationScore * weights.location +
             job.skillMatch * weights.skillMatch) /
           totalWeight;
 
         return {
           ...job,
+          titleMatchScore,
           score: Math.round(score),
         };
       })
       .sort((a, b) => b.score - a.score);
-  }, [preferences, weights]);
+  }, [preferences, weights, titleIntelligence]);
 
   return (
     <main className="page">
@@ -194,7 +294,7 @@ function App() {
         <h1>Job Search Smarter</h1>
         <p>
           Rank jobs based on compensation, work modality, industry fit, location
-          preferences, title alignment, and skills match.
+          preferences, OpenAI embedding-based title similarity, and skills match.
         </p>
       </section>
 
@@ -220,6 +320,67 @@ function App() {
           </button>
 
           {digestStatus && <p className="status">{digestStatus}</p>}
+        </div>
+
+        <div className="card">
+          <div className="section-title">
+            <Sparkles size={20} />
+            <h2>Target Job Title</h2>
+          </div>
+
+          <label htmlFor="target-title">Desired Job Title</label>
+
+          <input
+            id="target-title"
+            type="text"
+            placeholder="Example: EMS Engineer, Data Engineer, Grid Cybersecurity"
+            value={preferences.targetTitle}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                targetTitle: event.target.value,
+              })
+            }
+          />
+
+          <button className="primary-button" onClick={analyzeTitleWithOpenAI}>
+            <Wand2 size={16} />
+            Analyze Title with OpenAI
+          </button>
+
+          {titleStatus && <p className="status">{titleStatus}</p>}
+
+          <div className="status">
+            {titleIntelligence.normalizedTitle ? (
+              <>
+                LinkedIn-style normalized title:{" "}
+                <strong>{titleIntelligence.normalizedTitle}</strong>{" "}
+                <span>({titleIntelligence.confidence}% confidence)</span>
+              </>
+            ) : (
+              "Enter a title and run analysis to generate related titles and embedding similarity scores."
+            )}
+          </div>
+
+          <label>AI Generated Related Titles</label>
+
+          <div className="button-row">
+            {titleIntelligence.recommendedTitles.map((title) => (
+              <button
+                type="button"
+                key={title}
+                className="chip"
+                onClick={() =>
+                  setPreferences({
+                    ...preferences,
+                    targetTitle: title,
+                  })
+                }
+              >
+                {title}
+              </button>
+            ))}
+          </div>
         </div>
 
         <div className="card">
@@ -384,6 +545,7 @@ function App() {
                   ${job.compensation.toLocaleString()} · {job.modality} ·{" "}
                   {job.location}
                 </p>
+                <p>Embedding title similarity: {job.titleMatchScore}/100</p>
               </div>
             </article>
           ))}
