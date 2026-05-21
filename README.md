@@ -1,30 +1,22 @@
-# Real Email Verification Fix
+# Self-contained verification fix
 
-Replace/add:
+Replace/add these files:
 
-- `lib/security.js`
-- `api/request-email-verification.js`
-- `api/confirm-email.js`
-- `api/send-digest.js`
-- `api/subscribe-digest.js`
+- api/request-email-verification.js
+- api/confirm-email.js
+- api/check-email-env.js
+- api/send-digest.js
 
-Old verification emails will NOT count. Request a new verification email after deploying this.
-
-Required Vercel env vars:
-
-```text
-RESEND_API_KEY
-UPSTASH_REDIS_REST_URL
-UPSTASH_REDIS_REST_TOKEN
-SITE_URL=https://themeasuredcareer.com
-EMAIL_FROM=Job Search Smarter <digest@themeasuredcareer.com>
-```
+This removes helper/import dependency issues and returns exact Resend/Redis errors.
 
 Deploy:
 
-```powershell
 npm run build
 git add .
-git commit -m "Fix real email verification"
+git commit -m "Fix email verification route"
 git push
-```
+
+After deploying:
+1. Open https://themeasuredcareer.com/api/check-email-env
+2. Click Verify Email First again
+3. Request a NEW verification email

@@ -1,11 +1,28 @@
 import { Resend } from "resend";
-import {
-  getEmailFromAddress,
-  isEmailVerified,
-  normalizeEmail,
-} from "../lib/security.js";
+import { Redis } from "@upstash/redis";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
+const redis = Redis.fromEnv();
+
+function normalizeEmail(email) {
+  return String(email || "").trim().toLowerCase();
+}
+
+async function isEmailVerified(email) {
+  const normalizedEmail = normalizeEmail(email);
+  if (!normalizedEmail) return false;
+
+  const verified = await redis.hget("verified_emails", normalizedEmail);
+  return Boolean(verified);
+}
+
+function getEmailFrom() {
+  return (
+    process.env.EMAIL_FROM ||
+    process.env.RESEND_FROM ||
+    "Job Search Smarter <digest@themeasuredcareer.com>"
+  );
+}
 
 function escapeHtml(value = "") {
   return String(value)
@@ -63,6 +80,10 @@ export default async function handler(req, res) {
       return res.status(500).json({ error: "RESEND_API_KEY missing in Vercel." });
     }
 
+    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+      return res.status(500).json({ error: "Upstash Redis env vars missing in Vercel." });
+    }
+
     const verified = await isEmailVerified(normalizedEmail);
     if (!verified) {
       return res.status(403).json({
@@ -77,7 +98,7 @@ export default async function handler(req, res) {
         : preferences.targetTitle || "your selected job preferences";
 
     const response = await resend.emails.send({
-      from: getEmailFromAddress(),
+      from: getEmailFrom(),
       to: normalizedEmail,
       subject: "Your Job Search Smarter Ranked Jobs Digest",
       html: `
