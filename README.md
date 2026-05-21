@@ -1,22 +1,26 @@
-# Self-contained verification fix
+# No-dependency email verification fix
 
-Replace/add these files:
+This avoids Vercel function crashes caused by missing `resend` or `@upstash/redis` package imports.
+
+Replace/add:
 
 - api/request-email-verification.js
 - api/confirm-email.js
 - api/check-email-env.js
-- api/send-digest.js
 
-This removes helper/import dependency issues and returns exact Resend/Redis errors.
-
-Deploy:
+Then deploy:
 
 npm run build
 git add .
-git commit -m "Fix email verification route"
+git commit -m "Use no-dependency email verification routes"
 git push
 
-After deploying:
-1. Open https://themeasuredcareer.com/api/check-email-env
-2. Click Verify Email First again
-3. Request a NEW verification email
+After deploying, test with:
+
+Invoke-WebRequest `
+  -Uri "https://themeasuredcareer.com/api/request-email-verification" `
+  -Method POST `
+  -ContentType "application/json" `
+  -Body '{"email":"YOUR_EMAIL_HERE"}'
+
+Use Invoke-WebRequest instead of Invoke-RestMethod so PowerShell shows the response body on errors.

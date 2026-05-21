@@ -1,9 +1,4 @@
-import { Resend } from "resend";
-import { Redis } from "@upstash/redis";
 import crypto from "crypto";
-
-const resend = new Resend(process.env.RESEND_API_KEY);
-const redis = Redis.fromEnv();
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
@@ -48,16 +43,48 @@ function envStatus() {
   };
 }
 
-function messageFromError(error) {
-  if (!error) return "Unknown error";
-  if (typeof error === "string") return error;
-  if (error.message) return error.message;
+async function upstashSet(key, value, ttlSeconds) {
+  const url = `${process.env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSeconds}`;
 
-  try {
-    return JSON.stringify(error);
-  } catch {
-    return "Unknown error";
+  const response = await fetch(url, {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+    },
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(`Upstash SET failed: ${response.status} ${JSON.stringify(data)}`);
   }
+
+  return data;
+}
+
+async function sendResendEmail({ to, subject, html, text }) {
+  const response = await fetch("https://api.resend.com/emails", {
+    method: "POST",
+    headers: {
+      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      "Content-Type": "application/json",
+    },
+    body: JSON.stringify({
+      from: getEmailFrom(),
+      to,
+      subject,
+      html,
+      text,
+    }),
+  });
+
+  const data = await response.json().catch(() => null);
+
+  if (!response.ok) {
+    throw new Error(`Resend failed: ${response.status} ${JSON.stringify(data)}`);
+  }
+
+  return data;
 }
 
 export default async function handler(req, res) {
@@ -98,58 +125,42 @@ export default async function handler(req, res) {
     const tokenHash = hashToken(token);
     const verificationUrl = `${getSiteUrl()}/api/confirm-email?token=${token}`;
 
-    try {
-      await redis.set(
-        `email_verification:${tokenHash}`,
-        JSON.stringify({
-          email: normalizedEmail,
-          createdAt: new Date().toISOString(),
-        }),
-        { ex: 60 * 60 * 24 }
-      );
-    } catch (error) {
-      return res.status(500).json({
-        error: `Redis write failed: ${messageFromError(error)}`,
-        env: envStatus(),
-      });
-    }
+    await upstashSet(
+      `email_verification:${tokenHash}`,
+      JSON.stringify({
+        email: normalizedEmail,
+        createdAt: new Date().toISOString(),
+      }),
+      60 * 60 * 24
+    );
 
-    try {
-      const result = await resend.emails.send({
-        from: getEmailFrom(),
-        to: normalizedEmail,
-        subject: "Verify your email for Job Search Smarter",
-        html: `
-          <div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;">
-            <h1>Verify Your Email</h1>
-            <p>Please confirm your email address before sending job digests or subscribing to daily updates.</p>
-            <p>
-              <a href="${verificationUrl}" style="display:inline-block;background:#172033;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;">
-                Verify Email
-              </a>
-            </p>
-            <p style="font-size:12px;color:#667085;">If you did not request this email, you can safely ignore it.</p>
-          </div>
-        `,
-        text: `Verify your email for Job Search Smarter: ${verificationUrl}`,
-      });
+    const result = await sendResendEmail({
+      to: normalizedEmail,
+      subject: "Verify your email for Job Search Smarter",
+      html: `
+        <div style="font-family:Arial,sans-serif;line-height:1.6;color:#172033;">
+          <h1>Verify Your Email</h1>
+          <p>Please confirm your email address before sending job digests or subscribing to daily updates.</p>
+          <p>
+            <a href="${verificationUrl}" style="display:inline-block;background:#172033;color:white;padding:12px 18px;border-radius:10px;text-decoration:none;font-weight:700;">
+              Verify Email
+            </a>
+          </p>
+          <p style="font-size:12px;color:#667085;">If you did not request this email, you can safely ignore it.</p>
+        </div>
+      `,
+      text: `Verify your email for Job Search Smarter: ${verificationUrl}`,
+    });
 
-      return res.status(200).json({
-        success: true,
-        message: "Verification email sent.",
-        resendId: result?.data?.id || result?.id || null,
-        env: envStatus(),
-      });
-    } catch (error) {
-      return res.status(500).json({
-        error: `Resend send failed: ${messageFromError(error)}`,
-        hint: "Check Resend domain verification and EMAIL_FROM. EMAIL_FROM should be: Job Search Smarter <digest@themeasuredcareer.com>",
-        env: envStatus(),
-      });
-    }
+    return res.status(200).json({
+      success: true,
+      message: "Verification email sent.",
+      resendId: result?.id || null,
+      env: envStatus(),
+    });
   } catch (error) {
     return res.status(500).json({
-      error: `Unexpected verification failure: ${messageFromError(error)}`,
+      error: error?.message || "Verification email failed.",
       env: envStatus(),
     });
   }
