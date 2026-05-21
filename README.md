@@ -1,23 +1,25 @@
-# Better Title Recommendations + Company Preference Update
+# 50 Ranked Embedding Results Update
 
 Replace/add:
 
-- `src/App.jsx`
-- `api/title-match.js`
+- `api/search-jobs.js`
+- `lib/jobRetrieval.js`
+
+Keep your current:
 - `lib/jobRanking.js`
 
 What changed:
-- Better OpenAI recommended titles using chat completion + embeddings.
-- Broader cross-industry title recommendations.
-- New preferred company text box.
-- New Company Match optimization slider.
-- Company preference changes final ranking but does not filter out other jobs.
+- `/api/search-jobs` now returns up to 50 ranked jobs instead of 30.
+- Rankings require OpenAI embeddings through `rankJobsWithEmbeddings`.
+- Retrieval asks providers for a larger candidate pool before ranking.
+- If providers return fewer than 50, fallback supplements are added so the UI can still show 50 ranked results.
+- Response metadata includes `rankingMethod`, `retrievedCount`, `rankedCount`, and `returnedCount`.
 
 Deploy:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Add company preference ranking and improve title recommendations"
+git commit -m "Return 50 embedding-ranked job results"
 git push
 ```

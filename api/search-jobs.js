@@ -36,15 +36,18 @@ export default async function handler(req, res) {
 
   if (!process.env.OPENAI_API_KEY) {
     return res.status(500).json({
-      error: "OPENAI_API_KEY is not configured.",
-      hint: "Add OPENAI_API_KEY in Vercel Environment Variables and redeploy.",
+      error: "OPENAI_API_KEY is not configured. Rankings require OpenAI embeddings.",
     });
   }
 
   try {
-    const { preferences = {}, weights = {}, recommendedTitles = [] } = req.body;
+    const { preferences = {}, weights = {}, recommendedTitles = [] } = req.body || {};
 
-    const retrieved = await retrieveJobs(preferences, recommendedTitles);
+    const retrieved = await retrieveJobs(preferences, recommendedTitles, {
+      minimumCandidates: 50,
+      maxCandidates: 200,
+    });
+
     const ranked = await rankJobsWithEmbeddings(
       retrieved.jobs,
       preferences,
@@ -52,20 +55,27 @@ export default async function handler(req, res) {
       recommendedTitles
     );
 
+    const returnedJobs = ranked.jobs.slice(0, 50);
+
     return res.status(200).json({
-      source: "live-retrieval-openai-ranking",
-      jobs: ranked.jobs.slice(0, 30),
+      source: "live-retrieval-openai-embedding-ranking",
+      rankingMethod: "OpenAI text-embedding-3-small cosine similarity plus preference weighting",
+      jobs: returnedJobs,
       titleScores: ranked.titleScores,
       meta: {
         sources: retrieved.sources,
         usedFallback: retrieved.usedFallback,
         retrievedCount: retrieved.jobs.length,
-        returnedCount: Math.min(ranked.jobs.length, 30),
+        rankedCount: ranked.jobs.length,
+        returnedCount: returnedJobs.length,
+        minimumTargetResults: 50,
         providerErrors: retrieved.providerErrors || [],
         env: {
+          hasSerpApi: Boolean(process.env.SERPAPI_API_KEY),
           hasJSearch: Boolean(process.env.JSEARCH_API_KEY),
           hasAdzuna: Boolean(process.env.ADZUNA_APP_ID && process.env.ADZUNA_APP_KEY),
           hasUSAJobs: Boolean(process.env.USAJOBS_EMAIL && process.env.USAJOBS_API_KEY),
+          hasGreenhouse: Boolean(process.env.GREENHOUSE_BOARDS),
           hasOpenAI: Boolean(process.env.OPENAI_API_KEY),
           hasUpstash: Boolean(
             process.env.UPSTASH_REDIS_REST_URL &&
@@ -79,10 +89,7 @@ export default async function handler(req, res) {
 
     return res.status(500).json({
       error: error.message || "Job search failed.",
-      stack:
-        process.env.NODE_ENV === "development"
-          ? error.stack
-          : "Stack hidden in production.",
+      rankingMethod: "OpenAI embeddings",
     });
   }
 }
