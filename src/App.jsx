@@ -176,11 +176,32 @@ function App() {
     });
   }
 
-  function sendDigest() {
-    if (!emailIsValid(digestEmail)) {
-      setDigestStatus("Please enter a valid recipient email address.");
-      return;
+  async function sendDigest() {
+  if (!emailIsValid(digestEmail)) {
+    setDigestStatus("Please enter a valid email.");
+    return;
+  }
+
+  try {
+    const response = await fetch("/api/send-digest", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+      },
+      body: JSON.stringify({
+        email: digestEmail,
+      }),
+    });
+
+    if (!response.ok) {
+      throw new Error("Failed");
     }
+
+    setDigestStatus("Digest sent successfully.");
+  } catch (error) {
+    setDigestStatus("Failed to send digest.");
+  }
+}
 
     setDigestStatus(`Digest ready to send to ${digestEmail}. Connect this action to your email service/API.`);
   }
