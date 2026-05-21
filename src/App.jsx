@@ -11,6 +11,7 @@ import {
   X,
   Search,
   ExternalLink,
+  Bell,
 } from "lucide-react";
 
 import "./styles.css";
@@ -134,6 +135,7 @@ function parseSalary(value) {
 function App() {
   const [digestEmail, setDigestEmail] = useState("");
   const [digestStatus, setDigestStatus] = useState("");
+  const [subscribeStatus, setSubscribeStatus] = useState("");
   const [titleStatus, setTitleStatus] = useState("");
   const [searchStatus, setSearchStatus] = useState("");
 
@@ -428,6 +430,37 @@ function App() {
     }
   }
 
+  async function subscribeDailyDigest() {
+    if (!emailIsValid(digestEmail)) {
+      setSubscribeStatus("Please enter a valid email address before subscribing.");
+      return;
+    }
+
+    try {
+      const response = await fetch("/api/subscribe-digest", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: digestEmail,
+          preferences,
+          weights,
+          recommendedTitles: titleIntelligence.recommendedTitles,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "Subscription failed.");
+      }
+
+      setSubscribeStatus("Subscribed. Daily ranked job updates will be sent to this email.");
+    } catch (error) {
+      setSubscribeStatus(`Subscription failed: ${error.message}`);
+    }
+  }
+
   return (
     <main className="page">
       <section className="hero">
@@ -457,10 +490,21 @@ function App() {
           />
 
           <button className="primary-button" onClick={sendDigest}>
-            Send Digest
+            Send Digest Now
+          </button>
+
+          <button className="secondary-button" type="button" onClick={subscribeDailyDigest}>
+            <Bell size={16} />
+            Subscribe to Daily Updates
           </button>
 
           {digestStatus && <p className="status">{digestStatus}</p>}
+          {subscribeStatus && <p className="status">{subscribeStatus}</p>}
+
+          <p className="helper">
+            Daily subscriptions use the current titles, salary range, modality,
+            industry, location, and optimization weights.
+          </p>
         </div>
 
         <div className="card">

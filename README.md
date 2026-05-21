@@ -1,20 +1,53 @@
-# Ranked Email + Job Descriptions + Apply Links Update
+# Daily Subscription Update
 
-Replace/add these files:
+This adds:
+
+- Subscribe to Daily Updates button
+- Subscriber storage with Upstash Redis
+- Daily Vercel Cron endpoint
+- Daily ranked job emails with apply links
+- Unsubscribe endpoint
+
+Replace/add:
 
 - `src/App.jsx`
-- `api/search-jobs.js`
-- `api/send-digest.js`
+- `api/subscribe-digest.js`
+- `api/unsubscribe-digest.js`
+- `api/daily-digest.js`
+- `vercel.json`
+- `package.json`
 
-Also append the contents of:
+Required Vercel environment variables:
 
-- `src/styles-additions.css`
+```text
+OPENAI_API_KEY
+RESEND_API_KEY
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+CRON_SECRET
+```
 
-to your existing:
+Vercel Cron schedule in `vercel.json`:
 
-- `src/styles.css`
+```json
+{
+  "crons": [
+    {
+      "path": "/api/daily-digest",
+      "schedule": "0 15 * * *"
+    }
+  ]
+}
+```
 
-Changes:
-- Ranked jobs displayed on the website include descriptions.
-- Ranked jobs include clickable Apply Now links.
-- Email digest now includes the ranked jobs, match scores, descriptions, salary, modality, location, and apply links.
+This sends around 7 AM Pacific depending on daylight savings/UTC behavior.
+
+After replacing files:
+
+```powershell
+npm install
+npm run build
+git add .
+git commit -m "Add daily email subscriptions"
+git push
+```
