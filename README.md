@@ -1,43 +1,32 @@
-# Search Debug + Failsafe Patch
+# Greenhouse Retrieval Update
 
-This patch helps diagnose why live job search is failing.
-
-Replace/add:
-
-- `api/search-jobs.js`
-- `lib/jobRetrieval.js`
-- `package.json` if needed
-
-What this does:
-
-- Does not hard-fail if Upstash rate limiting is misconfigured.
-- Does not hard-fail if JSearch fails.
-- Returns fallback jobs instead of breaking the whole app.
-- Returns provider errors in `meta.providerErrors`.
-- Returns env flags in `meta.env`.
-
-After deploying, click Run Search and inspect:
+Replace:
 
 ```text
-F12 → Network → /api/search-jobs → Response
+lib/jobRetrieval.js
 ```
 
-Look for:
+This adds Greenhouse public board retrieval using your Vercel variable:
 
-```json
-"providerErrors": [...]
-"env": {
-  "hasJSearch": true,
-  "hasOpenAI": true
-}
+```text
+GREENHOUSE_BOARDS=openai,anthropic,databricks,stripe,doordash,scaleai
 ```
 
-Deploy:
+After replacing:
 
 ```powershell
-npm install
 npm run build
 git add .
-git commit -m "Add job search debug failsafe"
+git commit -m "Add Greenhouse job retrieval"
 git push
 ```
+
+Then run a search and check Network → /api/search-jobs → Response.
+
+You should see:
+
+```json
+"sources": ["JSearch", "Adzuna", "Greenhouse"]
+```
+
+or provider errors explaining any invalid board token.
