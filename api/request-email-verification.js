@@ -1,5 +1,9 @@
 import crypto from "crypto";
 
+function cleanEnv(value) {
+  return String(value || "").trim().replace(/^["']|["']$/g, "");
+}
+
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
 }
@@ -16,40 +20,50 @@ function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
+function getRedisUrl() {
+  return cleanEnv(process.env.UPSTASH_REDIS_REST_URL).replace(/\/$/, "");
+}
+
+function getRedisToken() {
+  return cleanEnv(process.env.UPSTASH_REDIS_REST_TOKEN);
+}
+
 function getSiteUrl() {
-  return (
+  return cleanEnv(
     process.env.SITE_URL ||
-    process.env.NEXT_PUBLIC_SITE_URL ||
-    "https://themeasuredcareer.com"
+      process.env.NEXT_PUBLIC_SITE_URL ||
+      "https://themeasuredcareer.com"
   ).replace(/\/$/, "");
 }
 
 function getEmailFrom() {
-  return (
+  return cleanEnv(
     process.env.EMAIL_FROM ||
-    process.env.RESEND_FROM ||
-    "Job Search Smarter <digest@themeasuredcareer.com>"
+      process.env.RESEND_FROM ||
+      "Job Search Smarter <digest@themeasuredcareer.com>"
   );
 }
 
 function envStatus() {
   return {
-    hasResendKey: Boolean(process.env.RESEND_API_KEY),
-    hasRedisUrl: Boolean(process.env.UPSTASH_REDIS_REST_URL),
-    hasRedisToken: Boolean(process.env.UPSTASH_REDIS_REST_TOKEN),
-    hasSiteUrl: Boolean(process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL),
-    siteUrl: process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL || null,
+    hasResendKey: Boolean(cleanEnv(process.env.RESEND_API_KEY)),
+    hasRedisUrl: Boolean(getRedisUrl()),
+    hasRedisToken: Boolean(getRedisToken()),
+    hasSiteUrl: Boolean(cleanEnv(process.env.SITE_URL || process.env.NEXT_PUBLIC_SITE_URL)),
+    siteUrl: getSiteUrl(),
     emailFrom: getEmailFrom(),
+    redisUrlPreview: getRedisUrl().slice(0, 35),
   };
 }
 
 async function upstashSet(key, value, ttlSeconds) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSeconds}`;
+  const redisUrl = getRedisUrl();
+  const redisToken = getRedisToken();
 
-  const response = await fetch(url, {
+  const response = await fetch(`${redisUrl}/set/${encodeURIComponent(key)}/${encodeURIComponent(value)}?EX=${ttlSeconds}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${redisToken}`,
     },
   });
 
@@ -66,7 +80,7 @@ async function sendResendEmail({ to, subject, html, text }) {
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.RESEND_API_KEY}`,
+      Authorization: `Bearer ${cleanEnv(process.env.RESEND_API_KEY)}`,
       "Content-Type": "application/json",
     },
     body: JSON.stringify({
@@ -107,14 +121,14 @@ export default async function handler(req, res) {
       });
     }
 
-    if (!process.env.RESEND_API_KEY) {
+    if (!cleanEnv(process.env.RESEND_API_KEY)) {
       return res.status(500).json({
         error: "RESEND_API_KEY missing in Vercel.",
         env: envStatus(),
       });
     }
 
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    if (!getRedisUrl() || !getRedisToken()) {
       return res.status(500).json({
         error: "UPSTASH_REDIS_REST_URL or UPSTASH_REDIS_REST_TOKEN missing in Vercel.",
         env: envStatus(),

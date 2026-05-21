@@ -1,26 +1,23 @@
-# No-dependency email verification fix
+# Upstash URL sanitize fix
 
-This avoids Vercel function crashes caused by missing `resend` or `@upstash/redis` package imports.
+The error showed your Vercel value contains quotes:
+
+"UPSTASH_REDIS_REST_URL" = "https://united-pup-132768.upstash.io"
+
+Best fix in Vercel:
+Remove the quote characters so the value is exactly:
+
+https://united-pup-132768.upstash.io
+
+This code also strips quotes defensively.
 
 Replace/add:
-
 - api/request-email-verification.js
 - api/confirm-email.js
 - api/check-email-env.js
 
-Then deploy:
-
+Deploy:
 npm run build
 git add .
-git commit -m "Use no-dependency email verification routes"
+git commit -m "Sanitize Upstash URL in verification routes"
 git push
-
-After deploying, test with:
-
-Invoke-WebRequest `
-  -Uri "https://themeasuredcareer.com/api/request-email-verification" `
-  -Method POST `
-  -ContentType "application/json" `
-  -Body '{"email":"YOUR_EMAIL_HERE"}'
-
-Use Invoke-WebRequest instead of Invoke-RestMethod so PowerShell shows the response body on errors.

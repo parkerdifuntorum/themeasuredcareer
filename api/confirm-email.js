@@ -1,11 +1,23 @@
 import crypto from "crypto";
 
+function cleanEnv(value) {
+  return String(value || "").trim().replace(/^["']|["']$/g, "");
+}
+
 function hashToken(token) {
   return crypto.createHash("sha256").update(token).digest("hex");
 }
 
 function normalizeEmail(email) {
   return String(email || "").trim().toLowerCase();
+}
+
+function getRedisUrl() {
+  return cleanEnv(process.env.UPSTASH_REDIS_REST_URL).replace(/\/$/, "");
+}
+
+function getRedisToken() {
+  return cleanEnv(process.env.UPSTASH_REDIS_REST_TOKEN);
 }
 
 function parseMaybeJson(value) {
@@ -23,12 +35,10 @@ function parseMaybeJson(value) {
 }
 
 async function upstashGet(key) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/get/${encodeURIComponent(key)}`;
-
-  const response = await fetch(url, {
+  const response = await fetch(`${getRedisUrl()}/get/${encodeURIComponent(key)}`, {
     method: "GET",
     headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${getRedisToken()}`,
     },
   });
 
@@ -42,12 +52,10 @@ async function upstashGet(key) {
 }
 
 async function upstashHset(hash, field, value) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/hset/${encodeURIComponent(hash)}/${encodeURIComponent(field)}/${encodeURIComponent(value)}`;
-
-  const response = await fetch(url, {
+  const response = await fetch(`${getRedisUrl()}/hset/${encodeURIComponent(hash)}/${encodeURIComponent(field)}/${encodeURIComponent(value)}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${getRedisToken()}`,
     },
   });
 
@@ -61,12 +69,10 @@ async function upstashHset(hash, field, value) {
 }
 
 async function upstashDel(key) {
-  const url = `${process.env.UPSTASH_REDIS_REST_URL}/del/${encodeURIComponent(key)}`;
-
-  const response = await fetch(url, {
+  const response = await fetch(`${getRedisUrl()}/del/${encodeURIComponent(key)}`, {
     method: "POST",
     headers: {
-      Authorization: `Bearer ${process.env.UPSTASH_REDIS_REST_TOKEN}`,
+      Authorization: `Bearer ${getRedisToken()}`,
     },
   });
 
@@ -87,7 +93,7 @@ export default async function handler(req, res) {
       return res.status(400).send("Invalid or missing confirmation token.");
     }
 
-    if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
+    if (!getRedisUrl() || !getRedisToken()) {
       return res.status(500).send("Upstash Redis environment variables are missing.");
     }
 
