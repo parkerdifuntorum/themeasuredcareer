@@ -1,4 +1,4 @@
-# Greenhouse Retrieval Update
+# SerpAPI Primary + Less Filtering Update
 
 Replace:
 
@@ -6,27 +6,24 @@ Replace:
 lib/jobRetrieval.js
 ```
 
-This adds Greenhouse public board retrieval using your Vercel variable:
+Changes:
+- Google Jobs via SerpAPI is now the primary retrieval source when `SERPAPI_API_KEY` is configured.
+- Industry is no longer used to filter out openings before ranking.
+- More titles are queried per search.
+- Greenhouse filtering is much less aggressive.
+- Retrieval returns up to 150 candidates before OpenAI ranking.
+
+Add this Vercel env var:
 
 ```text
-GREENHOUSE_BOARDS=openai,anthropic,databricks,stripe,doordash,scaleai
+SERPAPI_API_KEY=your_serpapi_key
 ```
 
-After replacing:
+Then:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Add Greenhouse job retrieval"
+git commit -m "Use Google Jobs primary retrieval and reduce filtering"
 git push
 ```
-
-Then run a search and check Network → /api/search-jobs → Response.
-
-You should see:
-
-```json
-"sources": ["JSearch", "Adzuna", "Greenhouse"]
-```
-
-or provider errors explaining any invalid board token.
