@@ -1,23 +1,27 @@
-# Direct Apply Links Only
+# Secondary Apply Link Enrichment
 
-Replace:
+Add/replace:
 
-- `lib/jobRetrieval.js`
+- `lib/applyEnrichment.js`
+- `api/search-jobs.js`
 
-What this does:
-- Rejects Google Search / Google Jobs / `htidocid` / aggregator search URLs.
-- Prefers direct company career/apply links when available.
-- Keeps direct ATS links such as Greenhouse, Lever, Workday, Ashby, SmartRecruiters, iCIMS, USAJobs, etc.
-- If no real direct application URL is available, `applyUrl` is set to `null`, so no Apply button should show.
-
-Important:
-Some job APIs do not always expose the true company application URL. In those cases, the app will hide the Apply button rather than sending users to a Google Jobs search page.
+What it does:
+- Keeps Google Jobs / SerpAPI as a discovery source.
+- After embedding ranking, enriches the top 50 jobs.
+- Attempts to replace weak/intermediary links with direct application URLs.
+- Tries provider links first, then redirect resolution, Greenhouse, Lever, then SerpAPI company careers search.
+- Does not drop jobs if no direct apply link is found.
+- Adds metadata:
+  - `applyUrlSource`
+  - `applyUrlConfidence`
+  - `meta.enrichedApplyLinks`
+  - `meta.directHighConfidenceApplyLinks`
 
 Deploy:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Require direct external apply links"
+git commit -m "Add secondary direct apply link enrichment"
 git push
 ```

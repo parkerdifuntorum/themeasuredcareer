@@ -1,5 +1,6 @@
 import { retrieveJobs } from "../lib/jobRetrieval.js";
 import { rankJobsWithEmbeddings } from "../lib/jobRanking.js";
+import { enrichApplyUrls } from "../lib/applyEnrichment.js";
 
 async function optionalRateLimit(req, res) {
   try {
@@ -55,19 +56,26 @@ export default async function handler(req, res) {
       recommendedTitles
     );
 
-    const returnedJobs = ranked.jobs.slice(0, 50);
+    const topRanked = ranked.jobs.slice(0, 50);
+    const enrichedJobs = await enrichApplyUrls(topRanked, {
+      limit: 50,
+      concurrency: 4,
+    });
 
     return res.status(200).json({
-      source: "live-retrieval-openai-embedding-ranking",
+      source: "live-retrieval-openai-embedding-ranking-apply-enriched",
       rankingMethod: "OpenAI text-embedding-3-small cosine similarity plus preference weighting",
-      jobs: returnedJobs,
+      enrichmentMethod: "Provider direct links, redirect resolution, Greenhouse API, Lever API, and SerpAPI company careers search",
+      jobs: enrichedJobs,
       titleScores: ranked.titleScores,
       meta: {
         sources: retrieved.sources,
         usedFallback: retrieved.usedFallback,
         retrievedCount: retrieved.jobs.length,
         rankedCount: ranked.jobs.length,
-        returnedCount: returnedJobs.length,
+        returnedCount: enrichedJobs.length,
+        enrichedApplyLinks: enrichedJobs.filter((job) => job.applyUrl && job.applyUrlConfidence > 0).length,
+        directHighConfidenceApplyLinks: enrichedJobs.filter((job) => job.applyUrlConfidence >= 60).length,
         minimumTargetResults: 50,
         providerErrors: retrieved.providerErrors || [],
         env: {
