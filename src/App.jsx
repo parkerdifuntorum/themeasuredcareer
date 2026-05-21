@@ -8,6 +8,8 @@ import {
   DollarSign,
   Sparkles,
   Wand2,
+  X,
+  Search,
 } from "lucide-react";
 
 import "./styles.css";
@@ -47,7 +49,7 @@ const fallbackRecommendedTitles = [
   "Energy Market Analyst",
 ];
 
-const sampleJobs = [
+const starterJobs = [
   {
     title: "Senior Power Systems Data Engineer",
     company: "Grid Analytics Co.",
@@ -56,6 +58,7 @@ const sampleJobs = [
     industry: "Utilities / Energy",
     location: "Sacramento, CA",
     skillMatch: 94,
+    source: "Starter Result",
   },
   {
     title: "Distribution Planning Engineer",
@@ -65,6 +68,7 @@ const sampleJobs = [
     industry: "Engineering",
     location: "South Lake Tahoe, CA",
     skillMatch: 88,
+    source: "Starter Result",
   },
   {
     title: "Market Risk Data Analyst",
@@ -74,6 +78,7 @@ const sampleJobs = [
     industry: "Finance",
     location: "Folsom, CA",
     skillMatch: 84,
+    source: "Starter Result",
   },
   {
     title: "OT Cybersecurity Engineer",
@@ -83,6 +88,7 @@ const sampleJobs = [
     industry: "Cybersecurity",
     location: "Remote",
     skillMatch: 90,
+    source: "Starter Result",
   },
   {
     title: "EMS Applications Engineer",
@@ -92,6 +98,7 @@ const sampleJobs = [
     industry: "Utilities / Energy",
     location: "Rocklin, CA",
     skillMatch: 96,
+    source: "Starter Result",
   },
 ];
 
@@ -110,9 +117,13 @@ function App() {
   const [digestEmail, setDigestEmail] = useState("");
   const [digestStatus, setDigestStatus] = useState("");
   const [titleStatus, setTitleStatus] = useState("");
+  const [searchStatus, setSearchStatus] = useState("");
+
+  const [jobs, setJobs] = useState(starterJobs);
 
   const [preferences, setPreferences] = useState({
     targetTitle: "",
+    selectedTitles: [],
     minSalary: "",
     maxSalary: "",
     modalities: [],
@@ -150,6 +161,38 @@ function App() {
     });
   }
 
+  function addSelectedTitle(title) {
+    setPreferences((current) => {
+      if (current.selectedTitles.includes(title)) {
+        return current;
+      }
+
+      return {
+        ...current,
+        selectedTitles: [...current.selectedTitles, title],
+      };
+    });
+  }
+
+  function removeSelectedTitle(title) {
+    setPreferences((current) => ({
+      ...current,
+      selectedTitles: current.selectedTitles.filter((item) => item !== title),
+    }));
+  }
+
+  function addTypedTitle() {
+    const typedTitle = preferences.targetTitle.trim();
+
+    if (!typedTitle) {
+      setTitleStatus("Enter a title before adding it.");
+      return;
+    }
+
+    addSelectedTitle(typedTitle);
+    setTitleStatus(`Added "${typedTitle}" to selected target titles.`);
+  }
+
   async function analyzeTitleWithOpenAI() {
     const targetTitle = preferences.targetTitle.trim();
 
@@ -168,12 +211,13 @@ function App() {
         },
         body: JSON.stringify({
           targetTitle,
-          jobTitles: sampleJobs.map((job) => job.title),
+          jobTitles: jobs.map((job) => job.title),
         }),
       });
 
       if (!response.ok) {
-        throw new Error("OpenAI title analysis failed.");
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "OpenAI title analysis failed.");
       }
 
       const data = await response.json();
@@ -186,9 +230,71 @@ function App() {
         source: data.source || "openai",
       });
 
-      setTitleStatus("OpenAI title analysis complete.");
+      setPreferences((current) => {
+        const nextTitles = [...current.selectedTitles];
+
+        if (data.normalizedTitle && !nextTitles.includes(data.normalizedTitle)) {
+          nextTitles.push(data.normalizedTitle);
+        }
+
+        return {
+          ...current,
+          selectedTitles: nextTitles,
+        };
+      });
+
+      setTitleStatus(
+        "OpenAI title analysis complete. Normalized title added to selected titles."
+      );
     } catch (error) {
-      setTitleStatus("OpenAI title analysis failed. Check OPENAI_API_KEY in Vercel.");
+      setTitleStatus(`OpenAI title analysis failed: ${error.message}`);
+    }
+  }
+
+  async function runSearch() {
+    const titlesToSearch = [
+      ...preferences.selectedTitles,
+      preferences.targetTitle.trim(),
+    ].filter(Boolean);
+
+    if (titlesToSearch.length === 0) {
+      setSearchStatus("Add at least one target title before running search.");
+      return;
+    }
+
+    setSearchStatus("Searching jobs and updating rankings...");
+
+    try {
+      const response = await fetch("/api/search-jobs", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          preferences: {
+            ...preferences,
+            selectedTitles: titlesToSearch,
+          },
+          recommendedTitles: titleIntelligence.recommendedTitles,
+        }),
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => null);
+        throw new Error(errorData?.error || "Job search failed.");
+      }
+
+      const data = await response.json();
+
+      setJobs(data.jobs || []);
+      setTitleIntelligence((current) => ({
+        ...current,
+        titleScores: data.titleScores || current.titleScores,
+      }));
+
+      setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} jobs.`);
+    } catch (error) {
+      setSearchStatus(`Search failed: ${error.message}`);
     }
   }
 
@@ -208,6 +314,7 @@ function App() {
           email: digestEmail,
           preferences,
           recommendedTitles: titleIntelligence.recommendedTitles,
+          jobs: rankedJobs.slice(0, 10),
         }),
       });
 
@@ -227,7 +334,9 @@ function App() {
     const totalWeight =
       Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
 
-    return sampleJobs
+    const selectedTitleText = preferences.selectedTitles.join(" ").toLowerCase();
+
+    return jobs
       .map((job) => {
         let compensationScore = 75;
 
@@ -261,13 +370,26 @@ function App() {
         const locationPreference = preferences.location.trim().toLowerCase();
         const locationScore =
           !locationPreference ||
-          job.location.toLowerCase().includes(locationPreference)
+          job.location.toLowerCase().includes(locationPreference) ||
+          job.location.toLowerCase() === "remote"
             ? 100
             : 55;
 
+        const openAiScore = titleIntelligence.titleScores[job.title];
+        const selectedTitleBonus =
+          preferences.selectedTitles.length > 0 &&
+          selectedTitleText
+            .split(/\s+/)
+            .some((word) => word.length > 3 && job.title.toLowerCase().includes(word))
+            ? 10
+            : 0;
+
         const titleMatchScore =
-          titleIntelligence.titleScores[job.title] ??
-          (preferences.targetTitle ? 50 : 75);
+          openAiScore !== undefined
+            ? Math.min(100, openAiScore + selectedTitleBonus)
+            : preferences.selectedTitles.length > 0
+              ? 65 + selectedTitleBonus
+              : 75;
 
         const score =
           (compensationScore * weights.compensation +
@@ -285,7 +407,7 @@ function App() {
         };
       })
       .sort((a, b) => b.score - a.score);
-  }, [preferences, weights, titleIntelligence]);
+  }, [jobs, preferences, weights, titleIntelligence]);
 
   return (
     <main className="page">
@@ -293,8 +415,8 @@ function App() {
         <p className="eyebrow">Intelligent opportunity ranking</p>
         <h1>Job Search Smarter</h1>
         <p>
-          Rank jobs based on compensation, work modality, industry fit, location
-          preferences, OpenAI embedding-based title similarity, and skills match.
+          Search jobs, rank them by your preferences, and use OpenAI embeddings
+          to compare titles beyond keyword matching.
         </p>
       </section>
 
@@ -325,10 +447,10 @@ function App() {
         <div className="card">
           <div className="section-title">
             <Sparkles size={20} />
-            <h2>Target Job Title</h2>
+            <h2>Target Job Titles</h2>
           </div>
 
-          <label htmlFor="target-title">Desired Job Title</label>
+          <label htmlFor="target-title">Enter a Job Title to Analyze</label>
 
           <input
             id="target-title"
@@ -343,10 +465,16 @@ function App() {
             }
           />
 
-          <button className="primary-button" onClick={analyzeTitleWithOpenAI}>
-            <Wand2 size={16} />
-            Analyze Title with OpenAI
-          </button>
+          <div className="button-row">
+            <button className="primary-button" onClick={analyzeTitleWithOpenAI}>
+              <Wand2 size={16} />
+              Analyze Title with OpenAI
+            </button>
+
+            <button className="secondary-button" type="button" onClick={addTypedTitle}>
+              Add Entered Title
+            </button>
+          </div>
 
           {titleStatus && <p className="status">{titleStatus}</p>}
 
@@ -362,24 +490,47 @@ function App() {
             )}
           </div>
 
+          <label>Selected Target Titles</label>
+
+          <div className="button-row">
+            {preferences.selectedTitles.length === 0 ? (
+              <p className="helper">No selected titles yet.</p>
+            ) : (
+              preferences.selectedTitles.map((title) => (
+                <button
+                  type="button"
+                  key={title}
+                  className="chip selected removable-chip"
+                  onClick={() => removeSelectedTitle(title)}
+                  title="Click to remove"
+                >
+                  {title}
+                  <X size={14} />
+                </button>
+              ))
+            )}
+          </div>
+
           <label>AI Generated Related Titles</label>
 
           <div className="button-row">
-            {titleIntelligence.recommendedTitles.map((title) => (
-              <button
-                type="button"
-                key={title}
-                className="chip"
-                onClick={() =>
-                  setPreferences({
-                    ...preferences,
-                    targetTitle: title,
-                  })
-                }
-              >
-                {title}
-              </button>
-            ))}
+            {titleIntelligence.recommendedTitles.map((title) => {
+              const selected = preferences.selectedTitles.includes(title);
+
+              return (
+                <button
+                  type="button"
+                  key={title}
+                  className={selected ? "chip selected" : "chip"}
+                  onClick={() =>
+                    selected ? removeSelectedTitle(title) : addSelectedTitle(title)
+                  }
+                >
+                  {selected ? "✓ " : "+ "}
+                  {title}
+                </button>
+              );
+            })}
           </div>
         </div>
 
@@ -528,7 +679,22 @@ function App() {
       </section>
 
       <section className="card results">
-        <h2>Ranked Jobs</h2>
+        <div className="results-header">
+          <div>
+            <h2>Ranked Jobs</h2>
+            <p className="helper">
+              Results update after each search and automatically re-rank when
+              preferences or weights change.
+            </p>
+          </div>
+
+          <button className="primary-button compact-button" onClick={runSearch}>
+            <Search size={16} />
+            Run Search
+          </button>
+        </div>
+
+        {searchStatus && <p className="status">{searchStatus}</p>}
 
         <div className="job-list">
           {rankedJobs.map((job) => (
@@ -537,6 +703,7 @@ function App() {
                 <h3>{job.title}</h3>
                 <p>{job.company}</p>
                 <span>{job.industry}</span>
+                {job.source && <span>{job.source}</span>}
               </div>
 
               <div className="job-meta">

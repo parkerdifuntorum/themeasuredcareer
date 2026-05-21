@@ -1,34 +1,23 @@
-# The Measured Career / Job Search Smarter OpenAI Embeddings Update
+# Run Search Update
 
-Files included:
+Replace/add these files:
 
 - `src/App.jsx`
-- `api/title-match.js`
-- `api/send-digest.js`
-- `package.json`
+- `api/search-jobs.js`
+- `package.json` if your dependencies are missing `openai` or `resend`
 
-## Required Vercel environment variables
+This update adds:
 
-Add these in Vercel → Project → Settings → Environment Variables:
+- Multiple selected recommended titles
+- Run Search button
+- `/api/search-jobs` Vercel serverless endpoint
+- OpenAI embedding search over a starter job catalog
+- Updated rankings when new results return
+- Automatic re-ranking when preferences or optimization weights change
+
+Required Vercel env vars:
 
 ```text
-OPENAI_API_KEY=your_openai_api_key
-RESEND_API_KEY=your_resend_api_key
-```
-
-After adding environment variables, redeploy the project.
-
-## Local install
-
-```powershell
-npm install
-npm run build
-```
-
-Then push:
-
-```powershell
-git add .
-git commit -m "Add OpenAI embeddings title matching"
-git push
+OPENAI_API_KEY
+RESEND_API_KEY
 ```
