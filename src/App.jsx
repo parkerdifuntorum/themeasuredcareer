@@ -183,14 +183,8 @@ function App() {
 
   function addSelectedTitle(title) {
     setPreferences((current) => {
-      if (current.selectedTitles.includes(title)) {
-        return current;
-      }
-
-      return {
-        ...current,
-        selectedTitles: [...current.selectedTitles, title],
-      };
+      if (current.selectedTitles.includes(title)) return current;
+      return { ...current, selectedTitles: [...current.selectedTitles, title] };
     });
   }
 
@@ -226,13 +220,8 @@ function App() {
     try {
       const response = await fetch("/api/title-match", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          targetTitle,
-          jobTitles: jobs.map((job) => job.title),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ targetTitle, jobTitles: jobs.map((job) => job.title) }),
       });
 
       if (!response.ok) {
@@ -252,30 +241,20 @@ function App() {
 
       setPreferences((current) => {
         const nextTitles = [...current.selectedTitles];
-
         if (data.normalizedTitle && !nextTitles.includes(data.normalizedTitle)) {
           nextTitles.push(data.normalizedTitle);
         }
-
-        return {
-          ...current,
-          selectedTitles: nextTitles,
-        };
+        return { ...current, selectedTitles: nextTitles };
       });
 
-      setTitleStatus(
-        "OpenAI title analysis complete. Normalized title added to selected titles."
-      );
+      setTitleStatus("OpenAI title analysis complete. Normalized title added to selected titles.");
     } catch (error) {
       setTitleStatus(`OpenAI title analysis failed: ${error.message}`);
     }
   }
 
   async function runSearch() {
-    const titlesToSearch = [
-      ...preferences.selectedTitles,
-      preferences.targetTitle.trim(),
-    ].filter(Boolean);
+    const titlesToSearch = [...preferences.selectedTitles, preferences.targetTitle.trim()].filter(Boolean);
 
     if (titlesToSearch.length === 0) {
       setSearchStatus("Add at least one target title before running search.");
@@ -287,16 +266,8 @@ function App() {
     try {
       const response = await fetch("/api/search-jobs", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          preferences: {
-            ...preferences,
-            selectedTitles: titlesToSearch,
-          },
-          recommendedTitles: titleIntelligence.recommendedTitles,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ preferences: { ...preferences, selectedTitles: titlesToSearch }, recommendedTitles: titleIntelligence.recommendedTitles }),
       });
 
       if (!response.ok) {
@@ -305,13 +276,8 @@ function App() {
       }
 
       const data = await response.json();
-
       setJobs(data.jobs || []);
-      setTitleIntelligence((current) => ({
-        ...current,
-        titleScores: data.titleScores || current.titleScores,
-      }));
-
+      setTitleIntelligence((current) => ({ ...current, titleScores: data.titleScores || current.titleScores }));
       setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} jobs.`);
     } catch (error) {
       setSearchStatus(`Search failed: ${error.message}`);
@@ -321,9 +287,7 @@ function App() {
   const rankedJobs = useMemo(() => {
     const minSalary = parseSalary(preferences.minSalary);
     const maxSalary = parseSalary(preferences.maxSalary);
-    const totalWeight =
-      Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
-
+    const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
     const selectedTitleText = preferences.selectedTitles.join(" ").toLowerCase();
 
     return jobs
@@ -331,31 +295,17 @@ function App() {
         let compensationScore = 75;
 
         if (minSalary && job.compensation < minSalary) {
-          compensationScore = Math.max(
-            0,
-            Math.round((job.compensation / minSalary) * 100)
-          );
-        } else if (
-          minSalary &&
-          maxSalary &&
-          job.compensation >= minSalary &&
-          job.compensation <= maxSalary
-        ) {
+          compensationScore = Math.max(0, Math.round((job.compensation / minSalary) * 100));
+        } else if (minSalary && maxSalary && job.compensation >= minSalary && job.compensation <= maxSalary) {
           compensationScore = 100;
         } else if (maxSalary && job.compensation > maxSalary) {
           compensationScore = 95;
         }
 
         const modalityScore =
-          preferences.modalities.length === 0 ||
-          preferences.modalities.includes(job.modality)
-            ? 100
-            : 40;
+          preferences.modalities.length === 0 || preferences.modalities.includes(job.modality) ? 100 : 40;
 
-        const industryScore =
-          preferences.industry === "Any" || preferences.industry === job.industry
-            ? 100
-            : 45;
+        const industryScore = preferences.industry === "Any" || preferences.industry === job.industry ? 100 : 45;
 
         const locationPreference = preferences.location.trim().toLowerCase();
         const locationScore =
@@ -368,9 +318,7 @@ function App() {
         const openAiScore = titleIntelligence.titleScores[job.title];
         const selectedTitleBonus =
           preferences.selectedTitles.length > 0 &&
-          selectedTitleText
-            .split(/\s+/)
-            .some((word) => word.length > 3 && job.title.toLowerCase().includes(word))
+          selectedTitleText.split(/\s+/).some((word) => word.length > 3 && job.title.toLowerCase().includes(word))
             ? 10
             : 0;
 
@@ -390,11 +338,7 @@ function App() {
             job.skillMatch * weights.skillMatch) /
           totalWeight;
 
-        return {
-          ...job,
-          titleMatchScore,
-          score: Math.round(score),
-        };
+        return { ...job, titleMatchScore, score: Math.round(score) };
       })
       .sort((a, b) => b.score - a.score);
   }, [jobs, preferences, weights, titleIntelligence]);
@@ -408,15 +352,8 @@ function App() {
     try {
       const response = await fetch("/api/send-digest", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: digestEmail,
-          preferences,
-          recommendedTitles: titleIntelligence.recommendedTitles,
-          jobs: rankedJobs.slice(0, 10),
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: digestEmail, preferences, recommendedTitles: titleIntelligence.recommendedTitles, jobs: rankedJobs.slice(0, 10) }),
       });
 
       if (!response.ok) {
@@ -439,15 +376,8 @@ function App() {
     try {
       const response = await fetch("/api/subscribe-digest", {
         method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          email: digestEmail,
-          preferences,
-          weights,
-          recommendedTitles: titleIntelligence.recommendedTitles,
-        }),
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: digestEmail, preferences, weights, recommendedTitles: titleIntelligence.recommendedTitles }),
       });
 
       if (!response.ok) {
@@ -455,7 +385,7 @@ function App() {
         throw new Error(errorData?.error || "Subscription failed.");
       }
 
-      setSubscribeStatus("Subscribed. Daily ranked job updates will be sent to this email.");
+      setSubscribeStatus("Almost done. Check your email and confirm your subscription.");
     } catch (error) {
       setSubscribeStatus(`Subscription failed: ${error.message}`);
     }
@@ -502,8 +432,7 @@ function App() {
           {subscribeStatus && <p className="status">{subscribeStatus}</p>}
 
           <p className="helper">
-            Daily subscriptions use the current titles, salary range, modality,
-            industry, location, and optimization weights.
+            Daily subscriptions require email confirmation before updates begin.
           </p>
         </div>
 
@@ -520,12 +449,7 @@ function App() {
             type="text"
             placeholder="Example: Data Analyst, Project Manager, Nurse, Research Scientist"
             value={preferences.targetTitle}
-            onChange={(event) =>
-              setPreferences({
-                ...preferences,
-                targetTitle: event.target.value,
-              })
-            }
+            onChange={(event) => setPreferences({ ...preferences, targetTitle: event.target.value })}
           />
 
           <div className="button-row">
@@ -544,8 +468,7 @@ function App() {
           <div className="status">
             {titleIntelligence.normalizedTitle ? (
               <>
-                LinkedIn-style normalized title:{" "}
-                <strong>{titleIntelligence.normalizedTitle}</strong>{" "}
+                LinkedIn-style normalized title: <strong>{titleIntelligence.normalizedTitle}</strong>{" "}
                 <span>({titleIntelligence.confidence}% confidence)</span>
               </>
             ) : (
@@ -585,9 +508,7 @@ function App() {
                   type="button"
                   key={title}
                   className={selected ? "chip selected" : "chip"}
-                  onClick={() =>
-                    selected ? removeSelectedTitle(title) : addSelectedTitle(title)
-                  }
+                  onClick={() => (selected ? removeSelectedTitle(title) : addSelectedTitle(title))}
                 >
                   {selected ? "✓ " : "+ "}
                   {title}
@@ -610,12 +531,7 @@ function App() {
                 id="min-salary"
                 placeholder="$90,000"
                 value={preferences.minSalary}
-                onChange={(event) =>
-                  setPreferences({
-                    ...preferences,
-                    minSalary: event.target.value,
-                  })
-                }
+                onChange={(event) => setPreferences({ ...preferences, minSalary: event.target.value })}
               />
             </div>
 
@@ -625,12 +541,7 @@ function App() {
                 id="max-salary"
                 placeholder="$170,000"
                 value={preferences.maxSalary}
-                onChange={(event) =>
-                  setPreferences({
-                    ...preferences,
-                    maxSalary: event.target.value,
-                  })
-                }
+                onChange={(event) => setPreferences({ ...preferences, maxSalary: event.target.value })}
               />
             </div>
           </div>
@@ -649,11 +560,7 @@ function App() {
               <button
                 type="button"
                 key={modality}
-                className={
-                  preferences.modalities.includes(modality)
-                    ? "chip selected"
-                    : "chip"
-                }
+                className={preferences.modalities.includes(modality) ? "chip selected" : "chip"}
                 onClick={() => toggleModality(modality)}
               >
                 {modality}
@@ -666,15 +573,9 @@ function App() {
           <select
             id="industry"
             value={preferences.industry}
-            onChange={(event) =>
-              setPreferences({
-                ...preferences,
-                industry: event.target.value,
-              })
-            }
+            onChange={(event) => setPreferences({ ...preferences, industry: event.target.value })}
           >
             <option>Any</option>
-
             {industries.map((industry) => (
               <option key={industry}>{industry}</option>
             ))}
@@ -689,12 +590,7 @@ function App() {
             id="location"
             placeholder="Enter preferred cities, states, or regions"
             value={preferences.location}
-            onChange={(event) =>
-              setPreferences({
-                ...preferences,
-                location: event.target.value,
-              })
-            }
+            onChange={(event) => setPreferences({ ...preferences, location: event.target.value })}
           />
         </div>
 
@@ -705,8 +601,7 @@ function App() {
           </div>
 
           <p className="helper">
-            Each slider is independent. Users can set every category to 100% if
-            all factors are critical.
+            Each slider is independent. Users can set every category to 100% if all factors are critical.
           </p>
 
           {[
@@ -729,12 +624,7 @@ function App() {
                 max="100"
                 step="5"
                 value={weights[key]}
-                onChange={(event) =>
-                  setWeights({
-                    ...weights,
-                    [key]: Number(event.target.value),
-                  })
-                }
+                onChange={(event) => setWeights({ ...weights, [key]: Number(event.target.value) })}
               />
             </div>
           ))}
@@ -746,8 +636,7 @@ function App() {
           <div>
             <h2>Ranked Jobs</h2>
             <p className="helper">
-              Results update after each search and automatically re-rank when
-              preferences or weights change.
+              Results update after each search and automatically re-rank when preferences or weights change.
             </p>
           </div>
 
@@ -769,12 +658,7 @@ function App() {
                 {job.source && <span>{job.source}</span>}
                 {job.description && <p className="job-description">{job.description}</p>}
                 {job.applyUrl && (
-                  <a
-                    className="apply-link"
-                    href={job.applyUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
+                  <a className="apply-link" href={job.applyUrl} target="_blank" rel="noreferrer">
                     Apply Now <ExternalLink size={14} />
                   </a>
                 )}
@@ -783,8 +667,7 @@ function App() {
               <div className="job-meta">
                 <strong>{job.score}/100</strong>
                 <p>
-                  ${job.compensation.toLocaleString()} · {job.modality} ·{" "}
-                  {job.location}
+                  ${job.compensation.toLocaleString()} · {job.modality} · {job.location}
                 </p>
                 <p>Embedding title similarity: {job.titleMatchScore}/100</p>
               </div>

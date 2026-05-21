@@ -1,23 +1,33 @@
-# Daily Subscription Update
+# Public Subscription Hardening Update
 
-This adds:
+This version adds public-release guardrails for daily subscriptions:
 
-- Subscribe to Daily Updates button
-- Subscriber storage with Upstash Redis
-- Daily Vercel Cron endpoint
-- Daily ranked job emails with apply links
+- Double opt-in confirmation email
+- Active subscribers only after confirmation
 - Unsubscribe endpoint
+- Upstash Redis persistent subscriber storage
+- Upstash serverless rate limiting on subscribe and unsubscribe
+- Optional Cloudflare Turnstile verification
+- Protected cron endpoint using CRON_SECRET
+- Daily digest sends only to confirmed subscribers
 
-Replace/add:
+## Replace/add files
 
 - `src/App.jsx`
+- `lib/security.js`
 - `api/subscribe-digest.js`
+- `api/confirm-digest.js`
 - `api/unsubscribe-digest.js`
 - `api/daily-digest.js`
 - `vercel.json`
 - `package.json`
 
-Required Vercel environment variables:
+Keep your existing:
+- `api/title-match.js`
+- `api/search-jobs.js`
+- `api/send-digest.js`
+
+## Required Vercel environment variables
 
 ```text
 OPENAI_API_KEY
@@ -25,29 +35,31 @@ RESEND_API_KEY
 UPSTASH_REDIS_REST_URL
 UPSTASH_REDIS_REST_TOKEN
 CRON_SECRET
+SITE_URL=https://themeasuredcareer.com
 ```
 
-Vercel Cron schedule in `vercel.json`:
+## Optional but recommended
 
-```json
-{
-  "crons": [
-    {
-      "path": "/api/daily-digest",
-      "schedule": "0 15 * * *"
-    }
-  ]
-}
+```text
+TURNSTILE_SECRET_KEY
 ```
 
-This sends around 7 AM Pacific depending on daylight savings/UTC behavior.
+If `TURNSTILE_SECRET_KEY` is not set, the API allows subscriptions without Turnstile. This lets you launch now and add Turnstile later.
 
-After replacing files:
+## Install and deploy
 
 ```powershell
 npm install
 npm run build
 git add .
-git commit -m "Add daily email subscriptions"
+git commit -m "Harden daily digest subscriptions"
 git push
+```
+
+## Manual cron test
+
+Use your CRON_SECRET:
+
+```powershell
+curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://themeasuredcareer.com/api/daily-digest
 ```
