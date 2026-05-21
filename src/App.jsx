@@ -14,6 +14,7 @@ import {
   Bell,
   ShieldCheck,
   Plane,
+  Building2,
 } from "lucide-react";
 
 import "./styles.css";
@@ -46,13 +47,17 @@ const modalities = ["Remote", "Hybrid", "On-site"];
 
 const fallbackRecommendedTitles = [
   "Data Analyst",
-  "Software Engineer",
-  "Project Manager",
   "Business Analyst",
-  "Product Manager",
+  "Operations Analyst",
+  "Product Analyst",
   "Research Analyst",
-  "Operations Manager",
+  "Project Manager",
+  "Program Manager",
+  "Customer Success Manager",
+  "Software Engineer",
+  "Systems Engineer",
   "Cybersecurity Analyst",
+  "Financial Analyst",
 ];
 
 const starterJobs = [
@@ -66,6 +71,7 @@ const starterJobs = [
     skillMatch: 88,
     travel: "Minimal",
     travelPercent: 0,
+    companyScore: 75,
     source: "Starter Result",
     description:
       "Analyze business performance data, build dashboards, write SQL queries, and translate operational data into decision-ready insights.",
@@ -81,6 +87,7 @@ const starterJobs = [
     skillMatch: 84,
     travel: "Minimal",
     travelPercent: 5,
+    companyScore: 75,
     source: "Starter Result",
     description:
       "Develop full-stack application features, integrate APIs, improve platform reliability, and collaborate with product and design teams.",
@@ -96,6 +103,7 @@ const starterJobs = [
     skillMatch: 86,
     travel: "Minimal",
     travelPercent: 0,
+    companyScore: 75,
     source: "Starter Result",
     description:
       "Work with clinical, claims, and operational datasets to support reporting, population health analysis, and healthcare process improvement.",
@@ -129,6 +137,7 @@ function App() {
   const [preferences, setPreferences] = useState({
     targetTitle: "",
     selectedTitles: [],
+    preferredCompanies: "",
     minSalary: "$90,000",
     maxSalary: "$170,000",
     modalities: [],
@@ -146,6 +155,7 @@ function App() {
     location: 50,
     skillMatch: 75,
     travel: 70,
+    company: 60,
   });
 
   const [titleIntelligence, setTitleIntelligence] = useState({
@@ -153,6 +163,7 @@ function App() {
     confidence: 0,
     recommendedTitles: fallbackRecommendedTitles,
     titleScores: {},
+    recommendationReason: "",
     source: "default",
   });
 
@@ -240,7 +251,7 @@ function App() {
       return;
     }
 
-    setTitleStatus("Analyzing title with OpenAI embeddings...");
+    setTitleStatus("Generating stronger title recommendations with OpenAI...");
 
     try {
       const response = await fetch("/api/title-match", {
@@ -250,6 +261,10 @@ function App() {
         },
         body: JSON.stringify({
           targetTitle,
+          selectedTitles: preferences.selectedTitles,
+          industry: preferences.industry,
+          location: preferences.location,
+          preferredCompanies: preferences.preferredCompanies,
           jobTitles: jobs.map((job) => job.title),
         }),
       });
@@ -265,6 +280,7 @@ function App() {
         confidence: data.confidence,
         recommendedTitles: data.recommendedTitles || fallbackRecommendedTitles,
         titleScores: data.titleScores || {},
+        recommendationReason: data.recommendationReason || "",
         source: data.source || "openai",
       });
 
@@ -282,7 +298,7 @@ function App() {
       });
 
       setTitleStatus(
-        "OpenAI title analysis complete. Normalized title added to selected titles."
+        "OpenAI title recommendations updated. Normalized title added to selected titles."
       );
     } catch (error) {
       setTitleStatus(`OpenAI title analysis failed: ${error.message}`);
@@ -522,6 +538,10 @@ function App() {
             )}
           </div>
 
+          {titleIntelligence.recommendationReason && (
+            <p className="helper">{titleIntelligence.recommendationReason}</p>
+          )}
+
           <label>Selected Target Titles</label>
 
           <div className="button-row">
@@ -668,6 +688,33 @@ function App() {
 
         <div className="card">
           <div className="section-title">
+            <Building2 size={20} />
+            <h2>Company Preference</h2>
+          </div>
+
+          <label htmlFor="preferred-companies">Preferred Company Names</label>
+
+          <input
+            id="preferred-companies"
+            type="text"
+            placeholder="Example: OpenAI, CAISO, Google, Microsoft"
+            value={preferences.preferredCompanies}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                preferredCompanies: event.target.value,
+              })
+            }
+          />
+
+          <p className="helper">
+            Enter one or more companies. Matching employers will rank higher,
+            but non-matching jobs are still included.
+          </p>
+        </div>
+
+        <div className="card">
+          <div className="section-title">
             <Plane size={20} />
             <h2>Travel Preference</h2>
           </div>
@@ -737,6 +784,7 @@ function App() {
             ["location", "Location Match"],
             ["skillMatch", "Skill Match"],
             ["travel", "Minimal Travel"],
+            ["company", "Company Match"],
           ].map(([key, label]) => (
             <div className="slider-row" key={key}>
               <div className="slider-label">
@@ -795,6 +843,9 @@ function App() {
                 <span>{job.industry || "General"}</span>
                 {job.source && <span>{job.source}</span>}
                 {job.travel && <span>Travel: {job.travel}</span>}
+                {job.companyScore !== undefined && (
+                  <span>Company match: {job.companyScore}/100</span>
+                )}
                 {job.description && (
                   <p className="job-description">{job.description}</p>
                 )}
@@ -824,6 +875,9 @@ function App() {
                 </p>
                 {job.travelScore !== undefined && (
                   <p>Travel score: {job.travelScore}/100</p>
+                )}
+                {job.companyScore !== undefined && (
+                  <p>Company score: {job.companyScore}/100</p>
                 )}
               </div>
             </article>

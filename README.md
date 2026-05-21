@@ -1,23 +1,23 @@
-# Upstash URL sanitize fix
-
-The error showed your Vercel value contains quotes:
-
-"UPSTASH_REDIS_REST_URL" = "https://united-pup-132768.upstash.io"
-
-Best fix in Vercel:
-Remove the quote characters so the value is exactly:
-
-https://united-pup-132768.upstash.io
-
-This code also strips quotes defensively.
+# Better Title Recommendations + Company Preference Update
 
 Replace/add:
-- api/request-email-verification.js
-- api/confirm-email.js
-- api/check-email-env.js
+
+- `src/App.jsx`
+- `api/title-match.js`
+- `lib/jobRanking.js`
+
+What changed:
+- Better OpenAI recommended titles using chat completion + embeddings.
+- Broader cross-industry title recommendations.
+- New preferred company text box.
+- New Company Match optimization slider.
+- Company preference changes final ranking but does not filter out other jobs.
 
 Deploy:
+
+```powershell
 npm run build
 git add .
-git commit -m "Sanitize Upstash URL in verification routes"
+git commit -m "Add company preference ranking and improve title recommendations"
 git push
+```
