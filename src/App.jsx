@@ -15,6 +15,7 @@ import {
   ShieldCheck,
   Plane,
   Building2,
+  RefreshCcw,
 } from "lucide-react";
 
 import "./styles.css";
@@ -79,8 +80,14 @@ function hasRealApplyUrl(job) {
     job?.applyUrl &&
     typeof job.applyUrl === "string" &&
     job.applyUrl.startsWith("http") &&
-    !job.applyUrl.includes("themeasuredcareer.com")
+    !job.applyUrl.includes("themeasuredcareer.com") &&
+    !job.applyUrl.includes("google.com/search") &&
+    !job.applyUrl.includes("htidocid")
   );
+}
+
+function normalizeTitle(value = "") {
+  return String(value).trim().toLowerCase();
 }
 
 function App() {
@@ -89,10 +96,13 @@ function App() {
   const [digestStatus, setDigestStatus] = useState("");
   const [subscribeStatus, setSubscribeStatus] = useState("");
   const [titleStatus, setTitleStatus] = useState("");
-  const [searchStatus, setSearchStatus] = useState("Run a search to retrieve and rank live job results.");
+  const [searchStatus, setSearchStatus] = useState(
+    "Run a search to retrieve and rank live job results."
+  );
 
   const [jobs, setJobs] = useState(starterJobs);
   const [lastSearchMeta, setLastSearchMeta] = useState(null);
+  const [lastSearchedTitleSignature, setLastSearchedTitleSignature] = useState("");
 
   const [preferences, setPreferences] = useState({
     targetTitle: "",
@@ -125,7 +135,62 @@ function App() {
     titleScores: {},
     recommendationReason: "",
     source: "default",
+    sourceTargetTitle: "",
   });
+
+  function resetTitleIntelligence() {
+    setTitleIntelligence({
+      normalizedTitle: "",
+      confidence: 0,
+      recommendedTitles: fallbackRecommendedTitles,
+      titleScores: {},
+      recommendationReason: "",
+      source: "default",
+      sourceTargetTitle: "",
+    });
+  }
+
+  function handleTargetTitleChange(value) {
+    setPreferences((current) => {
+      const oldTitle = normalizeTitle(current.targetTitle);
+      const newTitle = normalizeTitle(value);
+
+      const shouldResetSelectedTitles =
+        oldTitle &&
+        newTitle &&
+        oldTitle !== newTitle &&
+        !newTitle.includes(oldTitle) &&
+        !oldTitle.includes(newTitle);
+
+      return {
+        ...current,
+        targetTitle: value,
+        selectedTitles: shouldResetSelectedTitles ? [] : current.selectedTitles,
+      };
+    });
+
+    resetTitleIntelligence();
+    setJobs([]);
+    setLastSearchMeta(null);
+    setLastSearchedTitleSignature("");
+    setSearchStatus("Target title changed. Run a new search to retrieve fresh results.");
+  }
+
+  function startNewSearch() {
+    setPreferences((current) => ({
+      ...current,
+      targetTitle: "",
+      selectedTitles: [],
+      preferredCompanies: "",
+    }));
+
+    resetTitleIntelligence();
+    setJobs([]);
+    setLastSearchMeta(null);
+    setLastSearchedTitleSignature("");
+    setTitleStatus("");
+    setSearchStatus("New search started. Enter a target title and run search.");
+  }
 
   function toggleModality(modality) {
     setPreferences((current) => {
@@ -141,12 +206,16 @@ function App() {
   }
 
   function addSelectedTitle(title) {
+    const cleanTitle = String(title || "").trim();
+
+    if (!cleanTitle) return;
+
     setPreferences((current) => {
-      if (current.selectedTitles.includes(title)) return current;
+      if (current.selectedTitles.includes(cleanTitle)) return current;
 
       return {
         ...current,
-        selectedTitles: [...current.selectedTitles, title],
+        selectedTitles: [...current.selectedTitles, cleanTitle],
       };
     });
   }
@@ -242,6 +311,7 @@ function App() {
         titleScores: data.titleScores || {},
         recommendationReason: data.recommendationReason || "",
         source: data.source || "openai",
+        sourceTargetTitle: targetTitle,
       });
 
       setPreferences((current) => {
@@ -265,32 +335,68 @@ function App() {
     }
   }
 
+  function getCurrentRecommendedTitles() {
+    const currentTarget = normalizeTitle(preferences.targetTitle);
+    const recommendationTarget = normalizeTitle(titleIntelligence.sourceTargetTitle);
+
+    if (!currentTarget || currentTarget !== recommendationTarget) {
+      return [];
+    }
+
+    return titleIntelligence.recommendedTitles || [];
+  }
+
+  function buildSearchTitleSet() {
+    const currentTargetTitle = preferences.targetTitle.trim();
+
+    return Array.from(
+      new Set([
+        currentTargetTitle,
+        ...preferences.selectedTitles,
+      ].filter(Boolean))
+    );
+  }
+
+  function buildTitleSignature(titles) {
+    return titles
+      .map((title) => normalizeTitle(title))
+      .sort()
+      .join("|");
+  }
+
   async function runSearch() {
-    const titlesToSearch = [
-      ...preferences.selectedTitles,
-      preferences.targetTitle.trim(),
-    ].filter(Boolean);
+    const titlesToSearch = buildSearchTitleSet();
 
     if (titlesToSearch.length === 0) {
       setSearchStatus("Add at least one target title before running search.");
       return;
     }
 
-    setSearchStatus("Searching at least 50 candidates and updating rankings...");
+    const titleSignature = buildTitleSignature(titlesToSearch);
+    const recommendedTitles = getCurrentRecommendedTitles();
+
+    if (titleSignature !== lastSearchedTitleSignature) {
+      setJobs([]);
+      setLastSearchMeta(null);
+    }
+
+    setSearchStatus("Searching live job sources and ranking fresh results with embeddings...");
 
     try {
       const response = await fetch("/api/search-jobs", {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
+          "Cache-Control": "no-store",
         },
         body: JSON.stringify({
+          searchNonce: `${Date.now()}-${Math.random()}`,
           preferences: {
             ...preferences,
             selectedTitles: titlesToSearch,
           },
           weights,
-          recommendedTitles: titleIntelligence.recommendedTitles,
+          recommendedTitles,
         }),
       });
 
@@ -302,6 +408,7 @@ function App() {
 
       setJobs(data.jobs || []);
       setLastSearchMeta(data.meta || null);
+      setLastSearchedTitleSignature(titleSignature);
       setTitleIntelligence((current) => ({
         ...current,
         titleScores: data.titleScores || current.titleScores,
@@ -312,7 +419,7 @@ function App() {
         : "";
 
       setSearchStatus(
-        `Search complete. Ranked ${data.jobs?.length || 0} jobs from ${
+        `Fresh search complete. Ranked ${data.jobs?.length || 0} jobs from ${
           data.meta?.retrievedCount || 0
         } candidates${sourceText}.`
       );
@@ -338,7 +445,7 @@ function App() {
         body: JSON.stringify({
           email: digestEmail,
           preferences,
-          recommendedTitles: titleIntelligence.recommendedTitles,
+          recommendedTitles: getCurrentRecommendedTitles(),
           jobs: rankedJobs.slice(0, 10),
         }),
       });
@@ -371,7 +478,7 @@ function App() {
           email: digestEmail,
           preferences,
           weights,
-          recommendedTitles: titleIntelligence.recommendedTitles,
+          recommendedTitles: getCurrentRecommendedTitles(),
         }),
       });
 
@@ -461,12 +568,7 @@ function App() {
             type="text"
             placeholder="Example: Data Analyst, Project Manager, Nurse, Research Scientist"
             value={preferences.targetTitle}
-            onChange={(event) =>
-              setPreferences({
-                ...preferences,
-                targetTitle: event.target.value,
-              })
-            }
+            onChange={(event) => handleTargetTitleChange(event.target.value)}
           />
 
           <div className="button-row">
@@ -481,6 +583,15 @@ function App() {
               onClick={addTypedTitle}
             >
               Add Entered Title
+            </button>
+
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={startNewSearch}
+            >
+              <RefreshCcw size={16} />
+              Start New Search
             </button>
           </div>
 
@@ -526,23 +637,29 @@ function App() {
           <label>AI Generated Related Titles</label>
 
           <div className="button-row">
-            {titleIntelligence.recommendedTitles.map((title) => {
-              const selected = preferences.selectedTitles.includes(title);
+            {getCurrentRecommendedTitles().length === 0 ? (
+              <p className="helper">
+                Run title analysis for the current target title to generate fresh related titles.
+              </p>
+            ) : (
+              getCurrentRecommendedTitles().map((title) => {
+                const selected = preferences.selectedTitles.includes(title);
 
-              return (
-                <button
-                  type="button"
-                  key={title}
-                  className={selected ? "chip selected" : "chip"}
-                  onClick={() =>
-                    selected ? removeSelectedTitle(title) : addSelectedTitle(title)
-                  }
-                >
-                  {selected ? "✓ " : "+ "}
-                  {title}
-                </button>
-              );
-            })}
+                return (
+                  <button
+                    type="button"
+                    key={title}
+                    className={selected ? "chip selected" : "chip"}
+                    onClick={() =>
+                      selected ? removeSelectedTitle(title) : addSelectedTitle(title)
+                    }
+                  >
+                    {selected ? "✓ " : "+ "}
+                    {title}
+                  </button>
+                );
+              })
+            )}
           </div>
         </div>
 
@@ -668,8 +785,8 @@ function App() {
           />
 
           <p className="helper">
-            Enter one or more companies. Matching employers will rank higher,
-            but non-matching jobs are still included.
+            Enter one or more companies. Matching employers rank higher, but
+            other jobs are still included.
           </p>
         </div>
 
@@ -775,7 +892,7 @@ function App() {
           <div>
             <h2>Ranked Jobs</h2>
             <p className="helper">
-              Only live retrieved jobs are shown. Apply buttons only appear when a real external application link is available.
+              Only live retrieved jobs are shown. Changing the target title clears stale results and forces a fresh search.
               {lastSearchMeta?.sources?.length
                 ? ` Sources: ${lastSearchMeta.sources.join(", ")}.`
                 : ""}
@@ -790,58 +907,68 @@ function App() {
 
         {searchStatus && <p className="status">{searchStatus}</p>}
 
-        <div className="job-list">
-          {rankedJobs.map((job) => (
-            <article
-              className="job-card"
-              key={`${job.source}-${job.company}-${job.title}-${job.applyUrl || job.description || job.score}`}
-            >
-              <div>
-                <h3>{job.title}</h3>
-                <p>{job.company}</p>
-                <span>{job.industry || "General"}</span>
-                {job.source && <span>{job.source}</span>}
-                {job.travel && <span>Travel: {job.travel}</span>}
-                {job.companyScore !== undefined && (
-                  <span>Company match: {job.companyScore}/100</span>
-                )}
-                {job.description && (
-                  <p className="job-description">{job.description}</p>
-                )}
-                {hasRealApplyUrl(job) && (
-                  <a
-                    className="apply-link"
-                    href={job.applyUrl}
-                    target="_blank"
-                    rel="noreferrer"
-                  >
-                    Apply Now <ExternalLink size={14} />
-                  </a>
-                )}
-              </div>
+        {rankedJobs.length === 0 ? (
+          <p className="helper">
+            No jobs loaded yet. Enter a target title and run a search to retrieve
+            live results.
+          </p>
+        ) : (
+          <div className="job-list">
+            {rankedJobs.map((job, index) => (
+              <article
+                className="job-card"
+                key={`${job.source}-${job.company}-${job.title}-${job.applyUrl || index}`}
+              >
+                <div>
+                  <h3>{job.title}</h3>
+                  <p>{job.company}</p>
+                  <span>{job.industry || "General"}</span>
+                  {job.source && <span>{job.source}</span>}
+                  {job.travel && <span>Travel: {job.travel}</span>}
+                  {job.companyScore !== undefined && (
+                    <span>Company match: {job.companyScore}/100</span>
+                  )}
+                  {job.applyUrlSource && (
+                    <span>Apply link: {job.applyUrlSource}</span>
+                  )}
+                  {job.description && (
+                    <p className="job-description">{job.description}</p>
+                  )}
+                  {hasRealApplyUrl(job) && (
+                    <a
+                      className="apply-link"
+                      href={job.applyUrl}
+                      target="_blank"
+                      rel="noreferrer"
+                    >
+                      Apply Now <ExternalLink size={14} />
+                    </a>
+                  )}
+                </div>
 
-              <div className="job-meta">
-                <strong>{job.score}/100</strong>
-                <p>
-                  {job.compensation
-                    ? `$${job.compensation.toLocaleString()}`
-                    : "Salary not listed"}{" "}
-                  · {job.modality || "Not listed"} ·{" "}
-                  {job.location || "Not listed"}
-                </p>
-                <p>
-                  Embedding title similarity: {job.titleMatchScore ?? "N/A"}/100
-                </p>
-                {job.travelScore !== undefined && (
-                  <p>Travel score: {job.travelScore}/100</p>
-                )}
-                {job.companyScore !== undefined && (
-                  <p>Company score: {job.companyScore}/100</p>
-                )}
-              </div>
-            </article>
-          ))}
-        </div>
+                <div className="job-meta">
+                  <strong>{job.score}/100</strong>
+                  <p>
+                    {job.compensation
+                      ? `$${job.compensation.toLocaleString()}`
+                      : "Salary not listed"}{" "}
+                    · {job.modality || "Not listed"} ·{" "}
+                    {job.location || "Not listed"}
+                  </p>
+                  <p>
+                    Embedding title similarity: {job.titleMatchScore ?? "N/A"}/100
+                  </p>
+                  {job.travelScore !== undefined && (
+                    <p>Travel score: {job.travelScore}/100</p>
+                  )}
+                  {job.companyScore !== undefined && (
+                    <p>Company score: {job.companyScore}/100</p>
+                  )}
+                </div>
+              </article>
+            ))}
+          </div>
+        )}
       </section>
     </main>
   );
