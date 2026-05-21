@@ -13,6 +13,7 @@ import {
   ExternalLink,
   Bell,
   ShieldCheck,
+  Plane,
 } from "lucide-react";
 
 import "./styles.css";
@@ -63,6 +64,8 @@ const starterJobs = [
     industry: "Data / AI",
     location: "Remote",
     skillMatch: 88,
+    travel: "Minimal",
+    travelPercent: 0,
     source: "Starter Result",
     description:
       "Analyze business performance data, build dashboards, write SQL queries, and translate operational data into decision-ready insights.",
@@ -76,6 +79,8 @@ const starterJobs = [
     industry: "Software",
     location: "Sacramento, CA",
     skillMatch: 84,
+    travel: "Minimal",
+    travelPercent: 5,
     source: "Starter Result",
     description:
       "Develop full-stack application features, integrate APIs, improve platform reliability, and collaborate with product and design teams.",
@@ -89,6 +94,8 @@ const starterJobs = [
     industry: "Healthcare",
     location: "Remote",
     skillMatch: 86,
+    travel: "Minimal",
+    travelPercent: 0,
     source: "Starter Result",
     description:
       "Work with clinical, claims, and operational datasets to support reporting, population health analysis, and healthcare process improvement.",
@@ -98,6 +105,14 @@ const starterJobs = [
 
 function emailIsValid(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function getErrorMessage(data, fallback) {
+  if (!data) return fallback;
+  if (typeof data === "string") return data;
+  if (data.error) return data.error;
+  if (data.message) return data.message;
+  return JSON.stringify(data);
 }
 
 function App() {
@@ -119,6 +134,8 @@ function App() {
     modalities: [],
     industry: "Any",
     location: "",
+    minimizeTravel: true,
+    maxTravelPercent: 10,
   });
 
   const [weights, setWeights] = useState({
@@ -128,6 +145,7 @@ function App() {
     titleMatch: 75,
     location: 50,
     skillMatch: 75,
+    travel: 70,
   });
 
   const [titleIntelligence, setTitleIntelligence] = useState({
@@ -154,7 +172,11 @@ function App() {
   function addSelectedTitle(title) {
     setPreferences((current) => {
       if (current.selectedTitles.includes(title)) return current;
-      return { ...current, selectedTitles: [...current.selectedTitles, title] };
+
+      return {
+        ...current,
+        selectedTitles: [...current.selectedTitles, title],
+      };
     });
   }
 
@@ -199,10 +221,12 @@ function App() {
       const data = await response.json().catch(() => null);
 
       if (!response.ok) {
-        throw new Error(data?.error || "Could not send verification email.");
+        throw new Error(getErrorMessage(data, "Could not send verification email."));
       }
 
-      setEmailVerifyStatus("Verification email sent. Check your inbox and click the confirmation link.");
+      setEmailVerifyStatus(
+        "Verification email sent. Check your inbox and click the confirmation link."
+      );
     } catch (error) {
       setEmailVerifyStatus(`Verification failed: ${error.message}`);
     }
@@ -230,18 +254,17 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "OpenAI title analysis failed.");
-      }
+      const data = await response.json().catch(() => null);
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(getErrorMessage(data, "OpenAI title analysis failed."));
+      }
 
       setTitleIntelligence({
         normalizedTitle: data.normalizedTitle,
         confidence: data.confidence,
-        recommendedTitles: data.recommendedTitles,
-        titleScores: data.titleScores,
+        recommendedTitles: data.recommendedTitles || fallbackRecommendedTitles,
+        titleScores: data.titleScores || {},
         source: data.source || "openai",
       });
 
@@ -258,7 +281,9 @@ function App() {
         };
       });
 
-      setTitleStatus("OpenAI title analysis complete. Normalized title added to selected titles.");
+      setTitleStatus(
+        "OpenAI title analysis complete. Normalized title added to selected titles."
+      );
     } catch (error) {
       setTitleStatus(`OpenAI title analysis failed: ${error.message}`);
     }
@@ -275,7 +300,7 @@ function App() {
       return;
     }
 
-    setSearchStatus("Searching live job sources and updating rankings...");
+    setSearchStatus("Searching at least 50 candidates and updating rankings...");
 
     try {
       const response = await fetch("/api/search-jobs", {
@@ -293,12 +318,11 @@ function App() {
         }),
       });
 
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "Job search failed.");
-      }
+      const data = await response.json().catch(() => null);
 
-      const data = await response.json();
+      if (!response.ok) {
+        throw new Error(getErrorMessage(data, "Job search failed."));
+      }
 
       setJobs(data.jobs || []);
       setLastSearchMeta(data.meta || null);
@@ -311,7 +335,11 @@ function App() {
         ? ` from ${data.meta.sources.join(", ")}`
         : "";
 
-      setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} ranked jobs${sourceText}.`);
+      setSearchStatus(
+        `Search complete. Ranked ${data.jobs?.length || 0} jobs from ${
+          data.meta?.retrievedCount || 0
+        } candidates${sourceText}.`
+      );
     } catch (error) {
       setSearchStatus(`Search failed: ${error.message}`);
     }
@@ -339,9 +367,10 @@ function App() {
         }),
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "Failed to send digest");
+        throw new Error(getErrorMessage(data, "Failed to send digest."));
       }
 
       setDigestStatus("Digest sent successfully with ranked jobs.");
@@ -370,12 +399,15 @@ function App() {
         }),
       });
 
+      const data = await response.json().catch(() => null);
+
       if (!response.ok) {
-        const errorData = await response.json().catch(() => null);
-        throw new Error(errorData?.error || "Subscription failed.");
+        throw new Error(getErrorMessage(data, "Subscription failed."));
       }
 
-      setSubscribeStatus("Subscribed. Daily ranked job updates will be sent to this confirmed email.");
+      setSubscribeStatus(
+        "Subscribed. Daily ranked job updates will be sent to this confirmed email."
+      );
     } catch (error) {
       setSubscribeStatus(`Subscription failed: ${error.message}`);
     }
@@ -387,8 +419,8 @@ function App() {
         <p className="eyebrow">Intelligent opportunity ranking</p>
         <h1>Job Search Smarter</h1>
         <p>
-          Search live job sources, rank opportunities by your preferences, and use OpenAI embeddings
-          to compare titles beyond keyword matching.
+          Search live job sources, rank opportunities by your preferences, and
+          use OpenAI embeddings to compare titles beyond keyword matching.
         </p>
       </section>
 
@@ -409,7 +441,11 @@ function App() {
             onChange={(event) => setDigestEmail(event.target.value)}
           />
 
-          <button className="secondary-button" type="button" onClick={requestEmailVerification}>
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={requestEmailVerification}
+          >
             <ShieldCheck size={16} />
             Verify Email First
           </button>
@@ -418,8 +454,12 @@ function App() {
             Send Digest Now
           </button>
 
-          <button className="secondary-button" type="button" onClick={subscribeDailyDigest}>
-            <BellIcon />
+          <button
+            className="secondary-button"
+            type="button"
+            onClick={subscribeDailyDigest}
+          >
+            <Bell size={16} />
             Subscribe to Daily Updates
           </button>
 
@@ -459,7 +499,11 @@ function App() {
               Analyze Title with OpenAI
             </button>
 
-            <button className="secondary-button" type="button" onClick={addTypedTitle}>
+            <button
+              className="secondary-button"
+              type="button"
+              onClick={addTypedTitle}
+            >
               Add Entered Title
             </button>
           </div>
@@ -469,7 +513,8 @@ function App() {
           <div className="status">
             {titleIntelligence.normalizedTitle ? (
               <>
-                LinkedIn-style normalized title: <strong>{titleIntelligence.normalizedTitle}</strong>{" "}
+                LinkedIn-style normalized title:{" "}
+                <strong>{titleIntelligence.normalizedTitle}</strong>{" "}
                 <span>({titleIntelligence.confidence}% confidence)</span>
               </>
             ) : (
@@ -574,7 +619,9 @@ function App() {
                 type="button"
                 key={modality}
                 className={
-                  preferences.modalities.includes(modality) ? "chip selected" : "chip"
+                  preferences.modalities.includes(modality)
+                    ? "chip selected"
+                    : "chip"
                 }
                 onClick={() => toggleModality(modality)}
               >
@@ -619,6 +666,58 @@ function App() {
           />
         </div>
 
+        <div className="card">
+          <div className="section-title">
+            <Plane size={20} />
+            <h2>Travel Preference</h2>
+          </div>
+
+          <label>Travel Optimization</label>
+
+          <div className="button-row">
+            <button
+              type="button"
+              className={preferences.minimizeTravel ? "chip selected" : "chip"}
+              onClick={() =>
+                setPreferences({
+                  ...preferences,
+                  minimizeTravel: !preferences.minimizeTravel,
+                })
+              }
+            >
+              {preferences.minimizeTravel
+                ? "✓ Minimal Travel Preferred"
+                : "+ Prefer Minimal Travel"}
+            </button>
+          </div>
+
+          <div className="slider-row">
+            <div className="slider-label">
+              <span>Maximum Preferred Travel</span>
+              <strong>{preferences.maxTravelPercent}%</strong>
+            </div>
+
+            <input
+              type="range"
+              min="0"
+              max="100"
+              step="5"
+              value={preferences.maxTravelPercent}
+              onChange={(event) =>
+                setPreferences({
+                  ...preferences,
+                  maxTravelPercent: Number(event.target.value),
+                })
+              }
+            />
+          </div>
+
+          <p className="helper">
+            Jobs that mention heavy travel are ranked lower when minimal travel
+            is preferred.
+          </p>
+        </div>
+
         <div className="card wide">
           <div className="section-title">
             <SlidersHorizontal size={20} />
@@ -626,7 +725,8 @@ function App() {
           </div>
 
           <p className="helper">
-            Each slider is independent. Users can set every category to 100% if all factors are critical.
+            Each slider is independent. Users can set every category to 100% if
+            all factors are critical.
           </p>
 
           {[
@@ -636,6 +736,7 @@ function App() {
             ["titleMatch", "Title Match"],
             ["location", "Location Match"],
             ["skillMatch", "Skill Match"],
+            ["travel", "Minimal Travel"],
           ].map(([key, label]) => (
             <div className="slider-row" key={key}>
               <div className="slider-label">
@@ -666,8 +767,11 @@ function App() {
           <div>
             <h2>Ranked Jobs</h2>
             <p className="helper">
-              Results update after each search and automatically re-rank when preferences or weights change.
-              {lastSearchMeta?.sources?.length ? ` Sources: ${lastSearchMeta.sources.join(", ")}.` : ""}
+              Results update after each search and automatically re-rank when
+              preferences or weights change.
+              {lastSearchMeta?.sources?.length
+                ? ` Sources: ${lastSearchMeta.sources.join(", ")}.`
+                : ""}
             </p>
           </div>
 
@@ -681,15 +785,26 @@ function App() {
 
         <div className="job-list">
           {rankedJobs.map((job) => (
-            <article className="job-card" key={`${job.source}-${job.company}-${job.title}-${job.applyUrl}`}>
+            <article
+              className="job-card"
+              key={`${job.source}-${job.company}-${job.title}-${job.applyUrl}`}
+            >
               <div>
                 <h3>{job.title}</h3>
                 <p>{job.company}</p>
                 <span>{job.industry || "General"}</span>
                 {job.source && <span>{job.source}</span>}
-                {job.description && <p className="job-description">{job.description}</p>}
+                {job.travel && <span>Travel: {job.travel}</span>}
+                {job.description && (
+                  <p className="job-description">{job.description}</p>
+                )}
                 {job.applyUrl && (
-                  <a className="apply-link" href={job.applyUrl} target="_blank" rel="noreferrer">
+                  <a
+                    className="apply-link"
+                    href={job.applyUrl}
+                    target="_blank"
+                    rel="noreferrer"
+                  >
                     Apply Now <ExternalLink size={14} />
                   </a>
                 )}
@@ -698,9 +813,18 @@ function App() {
               <div className="job-meta">
                 <strong>{job.score}/100</strong>
                 <p>
-                  {job.compensation ? `$${job.compensation.toLocaleString()}` : "Salary not listed"} · {job.modality || "Not listed"} · {job.location || "Not listed"}
+                  {job.compensation
+                    ? `$${job.compensation.toLocaleString()}`
+                    : "Salary not listed"}{" "}
+                  · {job.modality || "Not listed"} ·{" "}
+                  {job.location || "Not listed"}
                 </p>
-                <p>Embedding title similarity: {job.titleMatchScore ?? "N/A"}/100</p>
+                <p>
+                  Embedding title similarity: {job.titleMatchScore ?? "N/A"}/100
+                </p>
+                {job.travelScore !== undefined && (
+                  <p>Travel score: {job.travelScore}/100</p>
+                )}
               </div>
             </article>
           ))}
@@ -708,10 +832,6 @@ function App() {
       </section>
     </main>
   );
-}
-
-function BellIcon() {
-  return <Bell size={16} />;
 }
 
 createRoot(document.getElementById("root")).render(<App />);
