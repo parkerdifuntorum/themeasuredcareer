@@ -1,33 +1,58 @@
-# Public Subscription Hardening Update
+# Real Job Retrieval Update
 
-This version adds public-release guardrails for daily subscriptions:
+This update replaces the static 12-result behavior with a real retrieval layer.
 
-- Double opt-in confirmation email
-- Active subscribers only after confirmation
-- Unsubscribe endpoint
-- Upstash Redis persistent subscriber storage
-- Upstash serverless rate limiting on subscribe and unsubscribe
-- Optional Cloudflare Turnstile verification
-- Protected cron endpoint using CRON_SECRET
-- Daily digest sends only to confirmed subscribers
+## What changed
+
+- `/api/search-jobs.js` now retrieves jobs from configured external job APIs first.
+- OpenAI embeddings rank the retrieved jobs.
+- Preferences and selected titles change the retrieved candidate pool.
+- Daily digest now uses the same live retrieval + ranking flow.
+- If no external API keys are configured, the app falls back to a small fallback catalog.
 
 ## Replace/add files
 
 - `src/App.jsx`
-- `lib/security.js`
-- `api/subscribe-digest.js`
-- `api/confirm-digest.js`
-- `api/unsubscribe-digest.js`
+- `api/search-jobs.js`
 - `api/daily-digest.js`
-- `vercel.json`
+- `lib/jobRetrieval.js`
+- `lib/jobRanking.js`
 - `package.json`
 
 Keep your existing:
+- `lib/security.js`
 - `api/title-match.js`
-- `api/search-jobs.js`
 - `api/send-digest.js`
+- `api/subscribe-digest.js`
+- `api/confirm-digest.js`
+- `api/unsubscribe-digest.js`
 
-## Required Vercel environment variables
+## Optional job API environment variables
+
+Add at least one provider for real results.
+
+### JSearch via RapidAPI
+
+```text
+JSEARCH_API_KEY=your_rapidapi_key
+```
+
+### Adzuna
+
+```text
+ADZUNA_APP_ID=your_adzuna_app_id
+ADZUNA_APP_KEY=your_adzuna_app_key
+ADZUNA_COUNTRY=us
+```
+
+### USAJobs
+
+```text
+USAJOBS_EMAIL=your_email@example.com
+USAJOBS_API_KEY=your_usajobs_api_key
+```
+
+## Required existing env vars
 
 ```text
 OPENAI_API_KEY
@@ -38,28 +63,12 @@ CRON_SECRET
 SITE_URL=https://themeasuredcareer.com
 ```
 
-## Optional but recommended
-
-```text
-TURNSTILE_SECRET_KEY
-```
-
-If `TURNSTILE_SECRET_KEY` is not set, the API allows subscriptions without Turnstile. This lets you launch now and add Turnstile later.
-
-## Install and deploy
+## Deploy
 
 ```powershell
 npm install
 npm run build
 git add .
-git commit -m "Harden daily digest subscriptions"
+git commit -m "Add real job retrieval and dynamic ranking"
 git push
-```
-
-## Manual cron test
-
-Use your CRON_SECRET:
-
-```powershell
-curl -H "Authorization: Bearer YOUR_CRON_SECRET" https://themeasuredcareer.com/api/daily-digest
 ```

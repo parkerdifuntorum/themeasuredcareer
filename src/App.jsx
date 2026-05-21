@@ -65,7 +65,7 @@ const starterJobs = [
     source: "Starter Result",
     description:
       "Analyze business performance data, build dashboards, write SQL queries, and translate operational data into decision-ready insights.",
-    applyUrl: "https://themeasuredcareer.com/jobs/data-analyst",
+    applyUrl: "https://themeasuredcareer.com",
   },
   {
     title: "Software Engineer",
@@ -78,7 +78,7 @@ const starterJobs = [
     source: "Starter Result",
     description:
       "Develop full-stack application features, integrate APIs, improve platform reliability, and collaborate with product and design teams.",
-    applyUrl: "https://themeasuredcareer.com/jobs/software-engineer",
+    applyUrl: "https://themeasuredcareer.com",
   },
   {
     title: "Healthcare Data Analyst",
@@ -91,33 +91,7 @@ const starterJobs = [
     source: "Starter Result",
     description:
       "Work with clinical, claims, and operational datasets to support reporting, population health analysis, and healthcare process improvement.",
-    applyUrl: "https://themeasuredcareer.com/jobs/healthcare-data-analyst",
-  },
-  {
-    title: "Financial Analyst",
-    company: "Capital Planning Partners",
-    compensation: 105000,
-    modality: "Hybrid",
-    industry: "Finance",
-    location: "Folsom, CA",
-    skillMatch: 82,
-    source: "Starter Result",
-    description:
-      "Support budgeting, forecasting, financial modeling, variance analysis, and executive reporting for strategic planning teams.",
-    applyUrl: "https://themeasuredcareer.com/jobs/financial-analyst",
-  },
-  {
-    title: "Research Engineer",
-    company: "Applied Research Lab",
-    compensation: 132000,
-    modality: "Hybrid",
-    industry: "Research",
-    location: "Davis, CA",
-    skillMatch: 89,
-    source: "Starter Result",
-    description:
-      "Design experiments, build prototypes, analyze technical results, and support applied research projects across engineering domains.",
-    applyUrl: "https://themeasuredcareer.com/jobs/research-engineer",
+    applyUrl: "https://themeasuredcareer.com",
   },
 ];
 
@@ -140,6 +114,7 @@ function App() {
   const [searchStatus, setSearchStatus] = useState("");
 
   const [jobs, setJobs] = useState(starterJobs);
+  const [lastSearchMeta, setLastSearchMeta] = useState(null);
 
   const [preferences, setPreferences] = useState({
     targetTitle: "",
@@ -171,7 +146,6 @@ function App() {
   function toggleModality(modality) {
     setPreferences((current) => {
       const selected = current.modalities.includes(modality);
-
       return {
         ...current,
         modalities: selected
@@ -261,13 +235,17 @@ function App() {
       return;
     }
 
-    setSearchStatus("Searching jobs and updating rankings...");
+    setSearchStatus("Searching live job sources and updating rankings...");
 
     try {
       const response = await fetch("/api/search-jobs", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ preferences: { ...preferences, selectedTitles: titlesToSearch }, recommendedTitles: titleIntelligence.recommendedTitles }),
+        body: JSON.stringify({
+          preferences: { ...preferences, selectedTitles: titlesToSearch },
+          weights,
+          recommendedTitles: titleIntelligence.recommendedTitles,
+        }),
       });
 
       if (!response.ok) {
@@ -276,72 +254,24 @@ function App() {
       }
 
       const data = await response.json();
+
       setJobs(data.jobs || []);
-      setTitleIntelligence((current) => ({ ...current, titleScores: data.titleScores || current.titleScores }));
-      setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} jobs.`);
+      setLastSearchMeta(data.meta || null);
+      setTitleIntelligence((current) => ({
+        ...current,
+        titleScores: data.titleScores || current.titleScores,
+      }));
+
+      const sourceText = data.meta?.sources?.length ? ` from ${data.meta.sources.join(", ")}` : "";
+      setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} ranked jobs${sourceText}.`);
     } catch (error) {
       setSearchStatus(`Search failed: ${error.message}`);
     }
   }
 
   const rankedJobs = useMemo(() => {
-    const minSalary = parseSalary(preferences.minSalary);
-    const maxSalary = parseSalary(preferences.maxSalary);
-    const totalWeight = Object.values(weights).reduce((sum, value) => sum + value, 0) || 1;
-    const selectedTitleText = preferences.selectedTitles.join(" ").toLowerCase();
-
-    return jobs
-      .map((job) => {
-        let compensationScore = 75;
-
-        if (minSalary && job.compensation < minSalary) {
-          compensationScore = Math.max(0, Math.round((job.compensation / minSalary) * 100));
-        } else if (minSalary && maxSalary && job.compensation >= minSalary && job.compensation <= maxSalary) {
-          compensationScore = 100;
-        } else if (maxSalary && job.compensation > maxSalary) {
-          compensationScore = 95;
-        }
-
-        const modalityScore =
-          preferences.modalities.length === 0 || preferences.modalities.includes(job.modality) ? 100 : 40;
-
-        const industryScore = preferences.industry === "Any" || preferences.industry === job.industry ? 100 : 45;
-
-        const locationPreference = preferences.location.trim().toLowerCase();
-        const locationScore =
-          !locationPreference ||
-          job.location.toLowerCase().includes(locationPreference) ||
-          job.location.toLowerCase() === "remote"
-            ? 100
-            : 55;
-
-        const openAiScore = titleIntelligence.titleScores[job.title];
-        const selectedTitleBonus =
-          preferences.selectedTitles.length > 0 &&
-          selectedTitleText.split(/\s+/).some((word) => word.length > 3 && job.title.toLowerCase().includes(word))
-            ? 10
-            : 0;
-
-        const titleMatchScore =
-          openAiScore !== undefined
-            ? Math.min(100, openAiScore + selectedTitleBonus)
-            : preferences.selectedTitles.length > 0
-              ? 65 + selectedTitleBonus
-              : 75;
-
-        const score =
-          (compensationScore * weights.compensation +
-            modalityScore * weights.modality +
-            industryScore * weights.industry +
-            titleMatchScore * weights.titleMatch +
-            locationScore * weights.location +
-            job.skillMatch * weights.skillMatch) /
-          totalWeight;
-
-        return { ...job, titleMatchScore, score: Math.round(score) };
-      })
-      .sort((a, b) => b.score - a.score);
-  }, [jobs, preferences, weights, titleIntelligence]);
+    return jobs;
+  }, [jobs]);
 
   async function sendDigest() {
     if (!emailIsValid(digestEmail)) {
@@ -397,7 +327,7 @@ function App() {
         <p className="eyebrow">Intelligent opportunity ranking</p>
         <h1>Job Search Smarter</h1>
         <p>
-          Search jobs, rank them by your preferences, and use OpenAI embeddings
+          Search live job sources, rank opportunities by your preferences, and use OpenAI embeddings
           to compare titles beyond keyword matching.
         </p>
       </section>
@@ -424,16 +354,14 @@ function App() {
           </button>
 
           <button className="secondary-button" type="button" onClick={subscribeDailyDigest}>
-            <Bell size={16} />
+            <BellIcon />
             Subscribe to Daily Updates
           </button>
 
           {digestStatus && <p className="status">{digestStatus}</p>}
           {subscribeStatus && <p className="status">{subscribeStatus}</p>}
 
-          <p className="helper">
-            Daily subscriptions require email confirmation before updates begin.
-          </p>
+          <p className="helper">Daily subscriptions require email confirmation before updates begin.</p>
         </div>
 
         <div className="card">
@@ -637,6 +565,7 @@ function App() {
             <h2>Ranked Jobs</h2>
             <p className="helper">
               Results update after each search and automatically re-rank when preferences or weights change.
+              {lastSearchMeta?.sources?.length ? ` Sources: ${lastSearchMeta.sources.join(", ")}.` : ""}
             </p>
           </div>
 
@@ -650,11 +579,11 @@ function App() {
 
         <div className="job-list">
           {rankedJobs.map((job) => (
-            <article className="job-card" key={`${job.company}-${job.title}`}>
+            <article className="job-card" key={`${job.source}-${job.company}-${job.title}-${job.applyUrl}`}>
               <div>
                 <h3>{job.title}</h3>
                 <p>{job.company}</p>
-                <span>{job.industry}</span>
+                <span>{job.industry || "General"}</span>
                 {job.source && <span>{job.source}</span>}
                 {job.description && <p className="job-description">{job.description}</p>}
                 {job.applyUrl && (
@@ -667,9 +596,9 @@ function App() {
               <div className="job-meta">
                 <strong>{job.score}/100</strong>
                 <p>
-                  ${job.compensation.toLocaleString()} · {job.modality} · {job.location}
+                  {job.compensation ? `$${job.compensation.toLocaleString()}` : "Salary not listed"} · {job.modality || "Not listed"} · {job.location || "Not listed"}
                 </p>
-                <p>Embedding title similarity: {job.titleMatchScore}/100</p>
+                <p>Embedding title similarity: {job.titleMatchScore ?? "N/A"}/100</p>
               </div>
             </article>
           ))}
@@ -677,6 +606,10 @@ function App() {
       </section>
     </main>
   );
+}
+
+function BellIcon() {
+  return <Bell size={16} />;
 }
 
 createRoot(document.getElementById("root")).render(<App />);
