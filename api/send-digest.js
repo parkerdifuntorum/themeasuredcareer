@@ -1,5 +1,9 @@
 import { Resend } from "resend";
-import { applyRateLimit, isEmailVerified, normalizeEmail } from "../lib/security.js";
+import {
+  getEmailFromAddress,
+  isEmailVerified,
+  normalizeEmail,
+} from "../lib/security.js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
 
@@ -19,72 +23,47 @@ function formatMoney(value) {
 
 function renderJobRows(jobs = []) {
   if (!jobs.length) {
-    return `
-      <p style="color:#667085;">No ranked jobs were included. Run a search first, then send the digest again.</p>
-    `;
+    return `<p style="color:#667085;">No ranked jobs were included. Run a search first, then send the digest again.</p>`;
   }
 
-  return jobs
-    .map((job, index) => {
-      const safeApplyUrl = escapeHtml(job.applyUrl || "https://themeasuredcareer.com");
-
-      return `
-        <tr>
-          <td style="padding:18px;border-bottom:1px solid #e5e7eb;">
-            <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#667085;font-weight:700;">
-              Rank #${index + 1} · Match Score ${job.score ?? "N/A"}/100
-            </div>
-            <h2 style="margin:6px 0 4px;font-size:18px;color:#172033;">${escapeHtml(job.title)}</h2>
-            <p style="margin:0 0 8px;color:#475467;font-weight:700;">${escapeHtml(job.company)}</p>
-            <p style="margin:0 0 8px;color:#667085;">
-              ${formatMoney(job.compensation)} · ${escapeHtml(job.modality)} · ${escapeHtml(job.location)} · ${escapeHtml(job.industry)}
-            </p>
-            <p style="margin:0 0 12px;color:#344054;line-height:1.5;">${escapeHtml(job.description || "No description provided.")}</p>
-            <a href="${safeApplyUrl}" style="display:inline-block;background:#172033;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700;">
-              Apply Now
-            </a>
-          </td>
-        </tr>
-      `;
-    })
-    .join("");
+  return jobs.map((job, index) => `
+    <tr>
+      <td style="padding:18px;border-bottom:1px solid #e5e7eb;">
+        <div style="font-size:12px;text-transform:uppercase;letter-spacing:.08em;color:#667085;font-weight:700;">
+          Rank #${index + 1} · Match Score ${job.score ?? "N/A"}/100
+        </div>
+        <h2 style="margin:6px 0 4px;font-size:18px;color:#172033;">${escapeHtml(job.title)}</h2>
+        <p style="margin:0 0 8px;color:#475467;font-weight:700;">${escapeHtml(job.company)}</p>
+        <p style="margin:0 0 8px;color:#667085;">
+          ${formatMoney(job.compensation)} · ${escapeHtml(job.modality || "Not listed")} · ${escapeHtml(job.location || "Not listed")} · ${escapeHtml(job.industry || "General")}
+        </p>
+        <p style="margin:0 0 12px;color:#344054;line-height:1.5;">${escapeHtml(job.description || "No description provided.")}</p>
+        <a href="${escapeHtml(job.applyUrl || "https://themeasuredcareer.com")}" style="display:inline-block;background:#172033;color:#ffffff;text-decoration:none;padding:10px 14px;border-radius:10px;font-weight:700;">
+          Apply Now
+        </a>
+      </td>
+    </tr>
+  `).join("");
 }
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed",
-    });
-  }
-
-  if (!(await applyRateLimit(req, res, { name: "send-digest", requests: 10, window: "1 h" }))) {
-    return;
-  }
-
-  if (!process.env.RESEND_API_KEY) {
-    return res.status(500).json({
-      error: "RESEND_API_KEY is not configured.",
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const {
-      email,
-      preferences = {},
-      recommendedTitles = [],
-      jobs = [],
-    } = req.body;
-
+    const { email, preferences = {}, recommendedTitles = [], jobs = [] } = req.body || {};
     const normalizedEmail = normalizeEmail(email);
 
     if (!normalizedEmail) {
-      return res.status(400).json({
-        error: "Recipient email is required.",
-      });
+      return res.status(400).json({ error: "Recipient email is required." });
+    }
+
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ error: "RESEND_API_KEY missing in Vercel." });
     }
 
     const verified = await isEmailVerified(normalizedEmail);
-
     if (!verified) {
       return res.status(403).json({
         error: "Please verify your email before sending a digest.",
@@ -98,7 +77,7 @@ export default async function handler(req, res) {
         : preferences.targetTitle || "your selected job preferences";
 
     const response = await resend.emails.send({
-      from: "digest@themeasuredcareer.com",
+      from: getEmailFromAddress(),
       to: normalizedEmail,
       subject: "Your Job Search Smarter Ranked Jobs Digest",
       html: `
@@ -109,24 +88,18 @@ export default async function handler(req, res) {
               <h1 style="margin:0;font-size:28px;">Your Ranked Jobs Digest</h1>
               <p style="margin:10px 0 0;color:#d0d5dd;">Ranked opportunities based on your selected preferences.</p>
             </div>
-
             <div style="padding:22px;">
               <p style="margin:0 0 8px;"><strong>Target titles:</strong> ${escapeHtml(targetTitle)}</p>
               <p style="margin:0 0 18px;"><strong>Recommended related titles:</strong> ${escapeHtml(recommendedTitles.join(", ") || "None selected")}</p>
-
-              <table style="width:100%;border-collapse:collapse;">
-                ${renderJobRows(jobs)}
-              </table>
+              <table style="width:100%;border-collapse:collapse;">${renderJobRows(jobs)}</table>
             </div>
           </div>
         </div>
       `,
     });
 
-    return res.status(200).json(response);
+    return res.status(200).json({ success: true, response });
   } catch (error) {
-    return res.status(500).json({
-      error: error.message || "Failed to send digest.",
-    });
+    return res.status(500).json({ error: error?.message || "Failed to send digest." });
   }
 }

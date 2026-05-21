@@ -1,10 +1,9 @@
 import { Resend } from "resend";
 import {
-  applyRateLimit,
+  getEmailFromAddress,
   isEmailVerified,
   normalizeEmail,
   redis,
-  verifyTurnstile,
 } from "../lib/security.js";
 
 const resend = new Resend(process.env.RESEND_API_KEY);
@@ -15,53 +14,22 @@ function emailIsValid(email) {
 
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({
-      error: "Method not allowed",
-    });
-  }
-
-  if (!(await applyRateLimit(req, res, { name: "subscribe-digest", requests: 5, window: "1 h" }))) {
-    return;
-  }
-
-  if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return res.status(500).json({
-      error: "Upstash Redis environment variables are not configured.",
-    });
-  }
-
-  if (!process.env.RESEND_API_KEY) {
-    return res.status(500).json({
-      error: "RESEND_API_KEY is not configured.",
-    });
+    return res.status(405).json({ error: "Method not allowed" });
   }
 
   try {
-    const {
-      email,
-      preferences = {},
-      weights = {},
-      recommendedTitles = [],
-      turnstileToken,
-    } = req.body;
-
+    const { email, preferences = {}, weights = {}, recommendedTitles = [] } = req.body || {};
     const normalizedEmail = normalizeEmail(email);
 
-    const turnstileOk = await verifyTurnstile(req, turnstileToken);
-    if (!turnstileOk) {
-      return res.status(403).json({
-        error: "Bot verification failed. Please refresh and try again.",
-      });
+    if (!normalizedEmail || !emailIsValid(normalizedEmail)) {
+      return res.status(400).json({ error: "A valid email address is required." });
     }
 
-    if (!normalizedEmail || !emailIsValid(normalizedEmail)) {
-      return res.status(400).json({
-        error: "A valid email address is required.",
-      });
+    if (!process.env.RESEND_API_KEY) {
+      return res.status(500).json({ error: "RESEND_API_KEY missing in Vercel." });
     }
 
     const verified = await isEmailVerified(normalizedEmail);
-
     if (!verified) {
       return res.status(403).json({
         error: "Please verify your email before subscribing.",
@@ -85,7 +53,7 @@ export default async function handler(req, res) {
     });
 
     await resend.emails.send({
-      from: "digest@themeasuredcareer.com",
+      from: getEmailFromAddress(),
       to: normalizedEmail,
       subject: "You are subscribed to Job Search Smarter daily updates",
       html: `
@@ -103,8 +71,6 @@ export default async function handler(req, res) {
       email: normalizedEmail,
     });
   } catch (error) {
-    return res.status(500).json({
-      error: error.message || "Failed to subscribe.",
-    });
+    return res.status(500).json({ error: error?.message || "Failed to subscribe." });
   }
 }
