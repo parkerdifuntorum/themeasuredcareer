@@ -12,6 +12,7 @@ import {
   Search,
   ExternalLink,
   Bell,
+  ShieldCheck,
 } from "lucide-react";
 
 import "./styles.css";
@@ -99,15 +100,9 @@ function emailIsValid(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function parseSalary(value) {
-  if (!value) return null;
-  const cleaned = String(value).replace(/[$,\s]/g, "");
-  const parsed = Number(cleaned);
-  return Number.isFinite(parsed) ? parsed : null;
-}
-
 function App() {
   const [digestEmail, setDigestEmail] = useState("");
+  const [emailVerifyStatus, setEmailVerifyStatus] = useState("");
   const [digestStatus, setDigestStatus] = useState("");
   const [subscribeStatus, setSubscribeStatus] = useState("");
   const [titleStatus, setTitleStatus] = useState("");
@@ -146,6 +141,7 @@ function App() {
   function toggleModality(modality) {
     setPreferences((current) => {
       const selected = current.modalities.includes(modality);
+
       return {
         ...current,
         modalities: selected
@@ -181,6 +177,37 @@ function App() {
     setTitleStatus(`Added "${typedTitle}" to selected target titles.`);
   }
 
+  async function requestEmailVerification() {
+    if (!emailIsValid(digestEmail)) {
+      setEmailVerifyStatus("Please enter a valid email address first.");
+      return;
+    }
+
+    setEmailVerifyStatus("Sending verification email...");
+
+    try {
+      const response = await fetch("/api/request-email-verification", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: digestEmail,
+        }),
+      });
+
+      const data = await response.json().catch(() => null);
+
+      if (!response.ok) {
+        throw new Error(data?.error || "Could not send verification email.");
+      }
+
+      setEmailVerifyStatus("Verification email sent. Check your inbox and click the confirmation link.");
+    } catch (error) {
+      setEmailVerifyStatus(`Verification failed: ${error.message}`);
+    }
+  }
+
   async function analyzeTitleWithOpenAI() {
     const targetTitle = preferences.targetTitle.trim();
 
@@ -194,8 +221,13 @@ function App() {
     try {
       const response = await fetch("/api/title-match", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ targetTitle, jobTitles: jobs.map((job) => job.title) }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          targetTitle,
+          jobTitles: jobs.map((job) => job.title),
+        }),
       });
 
       if (!response.ok) {
@@ -215,10 +247,15 @@ function App() {
 
       setPreferences((current) => {
         const nextTitles = [...current.selectedTitles];
+
         if (data.normalizedTitle && !nextTitles.includes(data.normalizedTitle)) {
           nextTitles.push(data.normalizedTitle);
         }
-        return { ...current, selectedTitles: nextTitles };
+
+        return {
+          ...current,
+          selectedTitles: nextTitles,
+        };
       });
 
       setTitleStatus("OpenAI title analysis complete. Normalized title added to selected titles.");
@@ -228,7 +265,10 @@ function App() {
   }
 
   async function runSearch() {
-    const titlesToSearch = [...preferences.selectedTitles, preferences.targetTitle.trim()].filter(Boolean);
+    const titlesToSearch = [
+      ...preferences.selectedTitles,
+      preferences.targetTitle.trim(),
+    ].filter(Boolean);
 
     if (titlesToSearch.length === 0) {
       setSearchStatus("Add at least one target title before running search.");
@@ -240,9 +280,14 @@ function App() {
     try {
       const response = await fetch("/api/search-jobs", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
+        headers: {
+          "Content-Type": "application/json",
+        },
         body: JSON.stringify({
-          preferences: { ...preferences, selectedTitles: titlesToSearch },
+          preferences: {
+            ...preferences,
+            selectedTitles: titlesToSearch,
+          },
           weights,
           recommendedTitles: titleIntelligence.recommendedTitles,
         }),
@@ -262,16 +307,17 @@ function App() {
         titleScores: data.titleScores || current.titleScores,
       }));
 
-      const sourceText = data.meta?.sources?.length ? ` from ${data.meta.sources.join(", ")}` : "";
+      const sourceText = data.meta?.sources?.length
+        ? ` from ${data.meta.sources.join(", ")}`
+        : "";
+
       setSearchStatus(`Search complete. Found ${data.jobs?.length || 0} ranked jobs${sourceText}.`);
     } catch (error) {
       setSearchStatus(`Search failed: ${error.message}`);
     }
   }
 
-  const rankedJobs = useMemo(() => {
-    return jobs;
-  }, [jobs]);
+  const rankedJobs = useMemo(() => jobs, [jobs]);
 
   async function sendDigest() {
     if (!emailIsValid(digestEmail)) {
@@ -282,8 +328,15 @@ function App() {
     try {
       const response = await fetch("/api/send-digest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: digestEmail, preferences, recommendedTitles: titleIntelligence.recommendedTitles, jobs: rankedJobs.slice(0, 10) }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: digestEmail,
+          preferences,
+          recommendedTitles: titleIntelligence.recommendedTitles,
+          jobs: rankedJobs.slice(0, 10),
+        }),
       });
 
       if (!response.ok) {
@@ -306,8 +359,15 @@ function App() {
     try {
       const response = await fetch("/api/subscribe-digest", {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email: digestEmail, preferences, weights, recommendedTitles: titleIntelligence.recommendedTitles }),
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          email: digestEmail,
+          preferences,
+          weights,
+          recommendedTitles: titleIntelligence.recommendedTitles,
+        }),
       });
 
       if (!response.ok) {
@@ -315,7 +375,7 @@ function App() {
         throw new Error(errorData?.error || "Subscription failed.");
       }
 
-      setSubscribeStatus("Almost done. Check your email and confirm your subscription.");
+      setSubscribeStatus("Subscribed. Daily ranked job updates will be sent to this confirmed email.");
     } catch (error) {
       setSubscribeStatus(`Subscription failed: ${error.message}`);
     }
@@ -349,6 +409,11 @@ function App() {
             onChange={(event) => setDigestEmail(event.target.value)}
           />
 
+          <button className="secondary-button" type="button" onClick={requestEmailVerification}>
+            <ShieldCheck size={16} />
+            Verify Email First
+          </button>
+
           <button className="primary-button" onClick={sendDigest}>
             Send Digest Now
           </button>
@@ -358,10 +423,13 @@ function App() {
             Subscribe to Daily Updates
           </button>
 
+          {emailVerifyStatus && <p className="status">{emailVerifyStatus}</p>}
           {digestStatus && <p className="status">{digestStatus}</p>}
           {subscribeStatus && <p className="status">{subscribeStatus}</p>}
 
-          <p className="helper">Daily subscriptions require email confirmation before updates begin.</p>
+          <p className="helper">
+            Users must verify their email before sending a digest or subscribing.
+          </p>
         </div>
 
         <div className="card">
@@ -377,7 +445,12 @@ function App() {
             type="text"
             placeholder="Example: Data Analyst, Project Manager, Nurse, Research Scientist"
             value={preferences.targetTitle}
-            onChange={(event) => setPreferences({ ...preferences, targetTitle: event.target.value })}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                targetTitle: event.target.value,
+              })
+            }
           />
 
           <div className="button-row">
@@ -436,7 +509,9 @@ function App() {
                   type="button"
                   key={title}
                   className={selected ? "chip selected" : "chip"}
-                  onClick={() => (selected ? removeSelectedTitle(title) : addSelectedTitle(title))}
+                  onClick={() =>
+                    selected ? removeSelectedTitle(title) : addSelectedTitle(title)
+                  }
                 >
                   {selected ? "✓ " : "+ "}
                   {title}
@@ -459,7 +534,12 @@ function App() {
                 id="min-salary"
                 placeholder="$90,000"
                 value={preferences.minSalary}
-                onChange={(event) => setPreferences({ ...preferences, minSalary: event.target.value })}
+                onChange={(event) =>
+                  setPreferences({
+                    ...preferences,
+                    minSalary: event.target.value,
+                  })
+                }
               />
             </div>
 
@@ -469,7 +549,12 @@ function App() {
                 id="max-salary"
                 placeholder="$170,000"
                 value={preferences.maxSalary}
-                onChange={(event) => setPreferences({ ...preferences, maxSalary: event.target.value })}
+                onChange={(event) =>
+                  setPreferences({
+                    ...preferences,
+                    maxSalary: event.target.value,
+                  })
+                }
               />
             </div>
           </div>
@@ -488,7 +573,9 @@ function App() {
               <button
                 type="button"
                 key={modality}
-                className={preferences.modalities.includes(modality) ? "chip selected" : "chip"}
+                className={
+                  preferences.modalities.includes(modality) ? "chip selected" : "chip"
+                }
                 onClick={() => toggleModality(modality)}
               >
                 {modality}
@@ -501,7 +588,12 @@ function App() {
           <select
             id="industry"
             value={preferences.industry}
-            onChange={(event) => setPreferences({ ...preferences, industry: event.target.value })}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                industry: event.target.value,
+              })
+            }
           >
             <option>Any</option>
             {industries.map((industry) => (
@@ -518,7 +610,12 @@ function App() {
             id="location"
             placeholder="Enter preferred cities, states, or regions"
             value={preferences.location}
-            onChange={(event) => setPreferences({ ...preferences, location: event.target.value })}
+            onChange={(event) =>
+              setPreferences({
+                ...preferences,
+                location: event.target.value,
+              })
+            }
           />
         </div>
 
@@ -552,7 +649,12 @@ function App() {
                 max="100"
                 step="5"
                 value={weights[key]}
-                onChange={(event) => setWeights({ ...weights, [key]: Number(event.target.value) })}
+                onChange={(event) =>
+                  setWeights({
+                    ...weights,
+                    [key]: Number(event.target.value),
+                  })
+                }
               />
             </div>
           ))}

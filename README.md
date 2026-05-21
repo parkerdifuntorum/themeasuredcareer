@@ -1,29 +1,47 @@
-# SerpAPI Primary + Less Filtering Update
+# Email Verification Required Update
 
-Replace:
+This update requires users to verify their email before:
+
+- Sending themselves a one-time digest
+- Subscribing to daily digest updates
+
+## Replace/add files
+
+- `src/App.jsx`
+- `lib/security.js`
+- `api/request-email-verification.js`
+- `api/confirm-email.js`
+- `api/send-digest.js`
+- `api/subscribe-digest.js`
+
+## Behavior
+
+1. User enters email.
+2. User clicks **Verify Email First**.
+3. User receives a confirmation link.
+4. User clicks the link and becomes verified.
+5. User can now use **Send Digest Now** or **Subscribe to Daily Updates**.
+
+## Required env vars
 
 ```text
-lib/jobRetrieval.js
+RESEND_API_KEY
+UPSTASH_REDIS_REST_URL
+UPSTASH_REDIS_REST_TOKEN
+SITE_URL=https://themeasuredcareer.com
 ```
 
-Changes:
-- Google Jobs via SerpAPI is now the primary retrieval source when `SERPAPI_API_KEY` is configured.
-- Industry is no longer used to filter out openings before ranking.
-- More titles are queried per search.
-- Greenhouse filtering is much less aggressive.
-- Retrieval returns up to 150 candidates before OpenAI ranking.
-
-Add this Vercel env var:
+Optional:
 
 ```text
-SERPAPI_API_KEY=your_serpapi_key
+TURNSTILE_SECRET_KEY
 ```
 
-Then:
+## Deploy
 
 ```powershell
 npm run build
 git add .
-git commit -m "Use Google Jobs primary retrieval and reduce filtering"
+git commit -m "Require email verification before digest and subscription"
 git push
 ```

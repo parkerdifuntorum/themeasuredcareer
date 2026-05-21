@@ -1,9 +1,8 @@
 import { Resend } from "resend";
 import {
   applyRateLimit,
-  baseUrl,
-  hashToken,
-  randomToken,
+  isEmailVerified,
+  normalizeEmail,
   redis,
   verifyTurnstile,
 } from "../lib/security.js";
@@ -14,18 +13,11 @@ function emailIsValid(email) {
   return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
 }
 
-function escapeHtml(value = "") {
-  return String(value)
-    .replaceAll("&", "&amp;")
-    .replaceAll("<", "&lt;")
-    .replaceAll(">", "&gt;")
-    .replaceAll('"', "&quot;")
-    .replaceAll("'", "&#039;");
-}
-
 export default async function handler(req, res) {
   if (req.method !== "POST") {
-    return res.status(405).json({ error: "Method not allowed" });
+    return res.status(405).json({
+      error: "Method not allowed",
+    });
   }
 
   if (!(await applyRateLimit(req, res, { name: "subscribe-digest", requests: 5, window: "1 h" }))) {
@@ -33,70 +25,86 @@ export default async function handler(req, res) {
   }
 
   if (!process.env.UPSTASH_REDIS_REST_URL || !process.env.UPSTASH_REDIS_REST_TOKEN) {
-    return res.status(500).json({ error: "Upstash Redis environment variables are not configured." });
+    return res.status(500).json({
+      error: "Upstash Redis environment variables are not configured.",
+    });
   }
 
   if (!process.env.RESEND_API_KEY) {
-    return res.status(500).json({ error: "RESEND_API_KEY is not configured." });
+    return res.status(500).json({
+      error: "RESEND_API_KEY is not configured.",
+    });
   }
 
   try {
-    const { email, preferences = {}, weights = {}, recommendedTitles = [], turnstileToken } = req.body;
+    const {
+      email,
+      preferences = {},
+      weights = {},
+      recommendedTitles = [],
+      turnstileToken,
+    } = req.body;
+
+    const normalizedEmail = normalizeEmail(email);
 
     const turnstileOk = await verifyTurnstile(req, turnstileToken);
     if (!turnstileOk) {
-      return res.status(403).json({ error: "Bot verification failed. Please refresh and try again." });
+      return res.status(403).json({
+        error: "Bot verification failed. Please refresh and try again.",
+      });
     }
 
-    if (!email || !emailIsValid(email)) {
-      return res.status(400).json({ error: "A valid email address is required." });
+    if (!normalizedEmail || !emailIsValid(normalizedEmail)) {
+      return res.status(400).json({
+        error: "A valid email address is required.",
+      });
     }
 
-    const normalizedEmail = String(email).trim().toLowerCase();
-    const token = randomToken();
-    const tokenHash = hashToken(token);
-    const confirmationUrl = `${baseUrl(req)}/api/confirm-digest?token=${token}`;
+    const verified = await isEmailVerified(normalizedEmail);
 
-    const pendingSubscription = {
+    if (!verified) {
+      return res.status(403).json({
+        error: "Please verify your email before subscribing.",
+      });
+    }
+
+    const subscription = {
       email: normalizedEmail,
       preferences,
       weights,
       recommendedTitles,
       frequency: "daily",
-      status: "pending",
-      tokenHash,
+      status: "active",
+      confirmedAt: new Date().toISOString(),
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
 
-    await redis.set(`pending_digest:${tokenHash}`, JSON.stringify(pendingSubscription), {
-      ex: 60 * 60 * 24,
+    await redis.hset("daily_digest_subscribers", {
+      [normalizedEmail]: JSON.stringify(subscription),
     });
 
     await resend.emails.send({
       from: "digest@themeasuredcareer.com",
       to: normalizedEmail,
-      subject: "Confirm your Job Search Smarter daily digest",
+      subject: "You are subscribed to Job Search Smarter daily updates",
       html: `
         <div style="font-family:Arial,sans-serif;line-height:1.5;color:#172033;">
-          <h1>Confirm your daily digest</h1>
-          <p>Please confirm that you want to receive daily ranked job updates from Job Search Smarter.</p>
-          <p>
-            <a href="${confirmationUrl}" style="display:inline-block;background:#172033;color:#fff;text-decoration:none;padding:12px 16px;border-radius:10px;font-weight:700;">
-              Confirm Subscription
-            </a>
-          </p>
-          <p style="font-size:12px;color:#667085;">If you did not request this, you can ignore this email.</p>
+          <h1>Subscription confirmed</h1>
+          <p>You are now subscribed to daily ranked job updates from Job Search Smarter.</p>
+          <p>You can unsubscribe anytime from the link included in each daily digest.</p>
         </div>
       `,
     });
 
     return res.status(200).json({
       success: true,
-      message: "Confirmation email sent.",
+      message: "Subscribed to daily ranked job updates.",
       email: normalizedEmail,
     });
   } catch (error) {
-    return res.status(500).json({ error: error.message || "Failed to start subscription." });
+    return res.status(500).json({
+      error: error.message || "Failed to subscribe.",
+    });
   }
 }
