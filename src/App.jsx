@@ -102,6 +102,7 @@ function App() {
 
   const [jobs, setJobs] = useState(starterJobs);
   const [lastSearchMeta, setLastSearchMeta] = useState(null);
+  const [lastCompletedSearch, setLastCompletedSearch] = useState(null);
   const [lastSearchedTitleSignature, setLastSearchedTitleSignature] = useState("");
 
   const [preferences, setPreferences] = useState({
@@ -172,6 +173,7 @@ function App() {
     resetTitleIntelligence();
     setJobs([]);
     setLastSearchMeta(null);
+    setLastCompletedSearch(null);
     setLastSearchedTitleSignature("");
     setSearchStatus("Target title changed. Run a new search to retrieve fresh results.");
   }
@@ -408,6 +410,17 @@ function App() {
 
       setJobs(data.jobs || []);
       setLastSearchMeta(data.meta || null);
+      setLastCompletedSearch({
+        preferences: {
+          ...preferences,
+          selectedTitles: titlesToSearch,
+        },
+        weights,
+        recommendedTitles,
+        titleSignature,
+        completedAt: new Date().toISOString(),
+        resultCount: data.jobs?.length || 0,
+      });
       setLastSearchedTitleSignature(titleSignature);
       setTitleIntelligence((current) => ({
         ...current,
@@ -419,9 +432,7 @@ function App() {
         : "";
 
       setSearchStatus(
-        `Fresh search complete. Ranked ${data.jobs?.length || 0} jobs from ${
-          data.meta?.retrievedCount || 0
-        } candidates${sourceText}.`
+        `Fresh search complete. Ranked ${data.jobs?.length || 0} jobs from ${data.meta?.retrievedCount || 0} candidates${sourceText}. You can now subscribe to this exact completed search.`
       );
     } catch (error) {
       setSearchStatus(`Search failed: ${error.message}`);
@@ -444,8 +455,8 @@ function App() {
         },
         body: JSON.stringify({
           email: digestEmail,
-          preferences,
-          recommendedTitles: getCurrentRecommendedTitles(),
+          preferences: lastCompletedSearch?.preferences || preferences,
+          recommendedTitles: lastCompletedSearch?.recommendedTitles || getCurrentRecommendedTitles?.() || titleIntelligence.recommendedTitles,
           jobs: rankedJobs.slice(0, 10),
         }),
       });
@@ -476,9 +487,14 @@ function App() {
         },
         body: JSON.stringify({
           email: digestEmail,
-          preferences,
-          weights,
-          recommendedTitles: getCurrentRecommendedTitles(),
+          searchSubscription: {
+            preferences: lastCompletedSearch.preferences,
+            weights: lastCompletedSearch.weights,
+            recommendedTitles: lastCompletedSearch.recommendedTitles,
+            titleSignature: lastCompletedSearch.titleSignature,
+            completedAt: lastCompletedSearch.completedAt,
+          },
+          latestJobs: rankedJobs.slice(0, 10),
         }),
       });
 
@@ -514,7 +530,18 @@ function App() {
             <h2>Email Digest</h2>
           </div>
 
-          <label htmlFor="digest-email">Recipient Email</label>
+                    <p
+            className="status"
+            style={{
+              fontWeight: 900,
+              fontSize: "1.05rem",
+              textTransform: "uppercase",
+            }}
+          >
+            Email is optional for search. Required only for daily digest subscription.
+          </p>
+
+<label htmlFor="digest-email">Recipient Email</label>
 
           <input
             id="digest-email"
@@ -541,9 +568,11 @@ function App() {
             className="secondary-button"
             type="button"
             onClick={subscribeDailyDigest}
+            disabled={!lastCompletedSearch}
+            title={!lastCompletedSearch ? "Run a search first" : "Subscribe to this completed search"}
           >
             <Bell size={16} />
-            Subscribe to Daily Updates
+            Subscribe to This Search
           </button>
 
           {emailVerifyStatus && <p className="status">{emailVerifyStatus}</p>}

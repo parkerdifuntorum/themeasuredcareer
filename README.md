@@ -1,29 +1,30 @@
-# Search-Specific Daily Subscriptions
+# Safe Search-Specific Daily Subscription Update
+
+This package does NOT replace your whole App.jsx.
 
 Add/replace:
-
 - `api/subscribe-digest.js`
 - `api/send-digest.js`
 - `api/daily-digest-cron.js`
 - `lib/digestRenderer.js`
 - `vercel.json`
-- Apply the patch in `patches/App_PATCH.md` to `src/App.jsx`
+- `scripts/patch-app-search-subscriptions.mjs`
 
-What changed:
-- Big bold UI notice: email is NOT required to run search.
-- Email is only needed to verify and subscribe/send digest.
-- Users can subscribe only after running a completed search.
-- Subscription saves the completed search settings.
-- Daily cron re-runs the saved search every day and sends updated ranked results.
-
-Deploy:
+Then run from your project root:
 
 ```powershell
+node scripts/patch-app-search-subscriptions.mjs
 npm run build
 git add .
 git commit -m "Add search-specific daily subscriptions"
 git push
 ```
+
+What it adds:
+- Big bold notice: EMAIL IS NOT REQUIRED TO RUN A SEARCH
+- Email required only for verification/digest subscription
+- Users can subscribe only after completing a search
+- Daily cron re-runs the saved search and sends updated results
 
 Manual cron test after deploy:
 
