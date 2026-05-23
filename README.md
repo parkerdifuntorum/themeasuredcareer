@@ -1,27 +1,22 @@
-# Secondary Apply Link Enrichment
+# Penalize Jobs Without Direct Company/ATS Apply Links
 
-Add/replace:
+Replace/add:
 
-- `lib/applyEnrichment.js`
 - `api/search-jobs.js`
+- `lib/applyEnrichment.js`
 
-What it does:
-- Keeps Google Jobs / SerpAPI as a discovery source.
-- After embedding ranking, enriches the top 50 jobs.
-- Attempts to replace weak/intermediary links with direct application URLs.
-- Tries provider links first, then redirect resolution, Greenhouse, Lever, then SerpAPI company careers search.
-- Does not drop jobs if no direct apply link is found.
-- Adds metadata:
-  - `applyUrlSource`
-  - `applyUrlConfidence`
-  - `meta.enrichedApplyLinks`
-  - `meta.directHighConfidenceApplyLinks`
+Behavior:
+- Adzuna jobs can still be discovered.
+- Adzuna redirect links are never used as Apply links.
+- If enrichment cannot find a company/ATS URL for an Adzuna job, it gets a strong ranking markdown.
+- Jobs with high-confidence direct company/ATS links rank higher.
+- Still returns up to 50 ranked jobs.
 
 Deploy:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Add secondary direct apply link enrichment"
+git commit -m "Penalize jobs without direct apply links"
 git push
 ```
