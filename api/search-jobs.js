@@ -30,27 +30,39 @@ function directApplyPenalty(job = {}) {
   const hasDirectApply = isDirectApplyUrl(job.applyUrl);
   const confidence = Number(job.applyUrlConfidence || 0);
 
-  if (hasDirectApply && confidence >= 60) return 0;
-  if (hasDirectApply && confidence > 0) return isAdzunaJob(job) ? 18 : 8;
+  if (hasDirectApply && confidence >= 70) return 0;
+  if (hasDirectApply && confidence >= 50) return isAdzunaJob(job) ? 20 : 8;
 
-  // Strong markdown: Adzuna should not be near the top unless enrichment found a direct company/ATS link.
-  if (isAdzunaJob(job)) return 45;
+  // Very strong markdown: Adzuna should not be recommended near the top
+  // unless enrichment found a real company/ATS URL.
+  if (isAdzunaJob(job)) return 65;
 
-  // Smaller markdown for other sources without a direct apply link.
-  return 18;
+  return 22;
 }
 
-function applyDirectApplicationPenalty(jobs = []) {
+function directApplyBoost(job = {}) {
+  const hasDirectApply = isDirectApplyUrl(job.applyUrl);
+  const confidence = Number(job.applyUrlConfidence || 0);
+
+  if (!hasDirectApply) return 0;
+  if (confidence >= 90) return 10;
+  if (confidence >= 70) return 6;
+  return 3;
+}
+
+function applyDirectApplicationAdjustment(jobs = []) {
   return jobs
     .map((job) => {
       const penalty = directApplyPenalty(job);
+      const boost = directApplyBoost(job);
       const originalScore = Number(job.score || 0);
 
       return {
         ...job,
         originalScore,
         directApplyPenalty: penalty,
-        score: Math.max(0, originalScore - penalty),
+        directApplyBoost: boost,
+        score: Math.max(0, originalScore - penalty + boost),
         applyUrlAvailable: isDirectApplyUrl(job.applyUrl),
       };
     })
@@ -77,7 +89,7 @@ export default async function handler(req, res) {
 
     const retrieved = await retrieveJobs(preferences, recommendedTitles, {
       minimumCandidates: 50,
-      maxCandidates: 200,
+      maxCandidates: 250,
     });
 
     const ranked = await rankJobsWithEmbeddings(
@@ -87,23 +99,22 @@ export default async function handler(req, res) {
       recommendedTitles
     );
 
-    // Enrich more than 50 before final re-sort so direct-link jobs can rise.
-    const rankedPool = ranked.jobs.slice(0, 100);
+    const rankedPool = ranked.jobs.slice(0, 120);
 
     const enrichedJobs = await enrichApplyUrls(rankedPool, {
-      limit: 100,
-      concurrency: 4,
+      limit: 120,
+      concurrency: 3,
     });
 
-    const finalRankedJobs = applyDirectApplicationPenalty(enrichedJobs);
+    const finalRankedJobs = applyDirectApplicationAdjustment(enrichedJobs);
     const returnedJobs = finalRankedJobs.slice(0, 50);
 
     return res.status(200).json({
-      source: "live-retrieval-openai-embedding-ranking-direct-apply-adjusted",
+      source: "live-retrieval-openai-embedding-ranking-strong-company-ats-enrichment",
       rankingMethod:
-        "OpenAI text-embedding-3-small cosine similarity plus preference weighting, then direct application link confidence adjustment",
+        "OpenAI embedding ranking plus strong company/ATS direct-apply enrichment adjustment",
       enrichmentMethod:
-        "Provider direct links, redirect resolution, Greenhouse API, Lever API, and SerpAPI company careers search",
+        "Provider direct links, redirect resolution, Greenhouse API, Lever API, exact company job search, and company careers page crawl",
       jobs: returnedJobs,
       titleScores: ranked.titleScores,
       meta: {
@@ -115,7 +126,7 @@ export default async function handler(req, res) {
         returnedCount: returnedJobs.length,
         enrichedApplyLinks: enrichedJobs.filter((job) => isDirectApplyUrl(job.applyUrl)).length,
         directHighConfidenceApplyLinks: enrichedJobs.filter(
-          (job) => isDirectApplyUrl(job.applyUrl) && Number(job.applyUrlConfidence || 0) >= 60
+          (job) => isDirectApplyUrl(job.applyUrl) && Number(job.applyUrlConfidence || 0) >= 70
         ).length,
         adzunaWithoutDirectApplyPenalized: enrichedJobs.filter(
           (job) => isAdzunaJob(job) && !isDirectApplyUrl(job.applyUrl)

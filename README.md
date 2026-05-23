@@ -1,35 +1,29 @@
-# Safe Search-Specific Daily Subscription Update
+# Stronger Company / ATS Apply Link Enrichment
 
-This package does NOT replace your whole App.jsx.
+Replace/add:
 
-Add/replace:
-- `api/subscribe-digest.js`
-- `api/send-digest.js`
-- `api/daily-digest-cron.js`
-- `lib/digestRenderer.js`
-- `vercel.json`
-- `scripts/patch-app-search-subscriptions.mjs`
+- `lib/applyEnrichment.js`
+- `api/search-jobs.js`
 
-Then run from your project root:
+What this changes:
+- Treats Adzuna as a discovery source only, not an apply destination.
+- Rejects Adzuna, Google Jobs, Indeed, LinkedIn, ZipRecruiter, Glassdoor, and other aggregator URLs as Apply links.
+- Searches harder for direct company/ATS links using:
+  - Greenhouse public boards
+  - Lever public postings
+  - exact company + title search
+  - company careers page search
+  - shallow company careers page crawl
+  - redirect resolution
+- Gives a very strong ranking penalty to Adzuna jobs when no direct company/ATS URL is found.
+- Gives a boost to jobs with high-confidence company/ATS Apply links.
+- Still returns up to 50 jobs, but jobs without direct apply links should fall lower.
+
+Deploy:
 
 ```powershell
-node scripts/patch-app-search-subscriptions.mjs
 npm run build
 git add .
-git commit -m "Add search-specific daily subscriptions"
+git commit -m "Strengthen company ATS apply link enrichment"
 git push
-```
-
-What it adds:
-- Big bold notice: EMAIL IS NOT REQUIRED TO RUN A SEARCH
-- Email required only for verification/digest subscription
-- Users can subscribe only after completing a search
-- Daily cron re-runs the saved search and sends updated results
-
-Manual cron test after deploy:
-
-```powershell
-Invoke-WebRequest `
-  -Uri "https://themeasuredcareer.com/api/daily-digest-cron?secret=YOUR_CRON_SECRET" `
-  -Method GET
 ```
