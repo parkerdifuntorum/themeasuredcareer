@@ -1,22 +1,34 @@
-# Penalize Jobs Without Direct Company/ATS Apply Links
+# Search-Specific Daily Subscriptions
 
-Replace/add:
+Add/replace:
 
-- `api/search-jobs.js`
-- `lib/applyEnrichment.js`
+- `api/subscribe-digest.js`
+- `api/send-digest.js`
+- `api/daily-digest-cron.js`
+- `lib/digestRenderer.js`
+- `vercel.json`
+- Apply the patch in `patches/App_PATCH.md` to `src/App.jsx`
 
-Behavior:
-- Adzuna jobs can still be discovered.
-- Adzuna redirect links are never used as Apply links.
-- If enrichment cannot find a company/ATS URL for an Adzuna job, it gets a strong ranking markdown.
-- Jobs with high-confidence direct company/ATS links rank higher.
-- Still returns up to 50 ranked jobs.
+What changed:
+- Big bold UI notice: email is NOT required to run search.
+- Email is only needed to verify and subscribe/send digest.
+- Users can subscribe only after running a completed search.
+- Subscription saves the completed search settings.
+- Daily cron re-runs the saved search every day and sends updated ranked results.
 
 Deploy:
 
 ```powershell
 npm run build
 git add .
-git commit -m "Penalize jobs without direct apply links"
+git commit -m "Add search-specific daily subscriptions"
 git push
+```
+
+Manual cron test after deploy:
+
+```powershell
+Invoke-WebRequest `
+  -Uri "https://themeasuredcareer.com/api/daily-digest-cron?secret=YOUR_CRON_SECRET" `
+  -Method GET
 ```
