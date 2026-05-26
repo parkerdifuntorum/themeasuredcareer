@@ -1,29 +1,26 @@
-# Stronger Company / ATS Apply Link Enrichment
+# Company Careers Link Fallback Update
 
 Replace/add:
 
 - `lib/applyEnrichment.js`
 - `api/search-jobs.js`
+- `lib/digestRenderer.js`
+- `scripts/patch-app-apply-link-notes.mjs`
 
-What this changes:
-- Treats Adzuna as a discovery source only, not an apply destination.
-- Rejects Adzuna, Google Jobs, Indeed, LinkedIn, ZipRecruiter, Glassdoor, and other aggregator URLs as Apply links.
-- Searches harder for direct company/ATS links using:
-  - Greenhouse public boards
-  - Lever public postings
-  - exact company + title search
-  - company careers page search
-  - shallow company careers page crawl
-  - redirect resolution
-- Gives a very strong ranking penalty to Adzuna jobs when no direct company/ATS URL is found.
-- Gives a boost to jobs with high-confidence company/ATS Apply links.
-- Still returns up to 50 jobs, but jobs without direct apply links should fall lower.
-
-Deploy:
+Then run:
 
 ```powershell
+node scripts/patch-app-apply-link-notes.mjs
 npm run build
 git add .
-git commit -m "Strengthen company ATS apply link enrichment"
+git commit -m "Use company careers links instead of aggregator apply links"
 git push
 ```
+
+Behavior:
+- Adzuna remains a discovery source.
+- Adzuna links are never shown to users.
+- If exact company/ATS role URL is found, button says something like “Apply on company ATS.”
+- If exact role URL is not confirmed, app tries to find the company careers page and uses that instead.
+- The link note tells users when it is a company careers fallback rather than an exact application page.
+- If no company-owned career/apply URL is found, no aggregator link is shown.

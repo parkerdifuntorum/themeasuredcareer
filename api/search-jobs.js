@@ -26,43 +26,38 @@ function isAdzunaJob(job = {}) {
   return String(job.source || "").toLowerCase().includes("adzuna");
 }
 
-function directApplyPenalty(job = {}) {
-  const hasDirectApply = isDirectApplyUrl(job.applyUrl);
+function directApplyAdjustment(job = {}) {
+  const hasSafeLink = isDirectApplyUrl(job.applyUrl);
+  const isFallbackCareerPage = Boolean(job.applyLinkIsFallbackCareerPage);
   const confidence = Number(job.applyUrlConfidence || 0);
 
-  if (hasDirectApply && confidence >= 70) return 0;
-  if (hasDirectApply && confidence >= 50) return isAdzunaJob(job) ? 20 : 8;
+  if (!hasSafeLink) {
+    return isAdzunaJob(job) ? -50 : -22;
+  }
 
-  // Very strong markdown: Adzuna should not be recommended near the top
-  // unless enrichment found a real company/ATS URL.
-  if (isAdzunaJob(job)) return 65;
+  if (isFallbackCareerPage) {
+    // This is acceptable because it avoids Adzuna/aggregators, but it is weaker than the exact role URL.
+    return isAdzunaJob(job) ? -5 : 0;
+  }
 
-  return 22;
-}
+  if (confidence >= 110) return 12;
+  if (confidence >= 90) return 8;
+  if (confidence >= 70) return 4;
 
-function directApplyBoost(job = {}) {
-  const hasDirectApply = isDirectApplyUrl(job.applyUrl);
-  const confidence = Number(job.applyUrlConfidence || 0);
-
-  if (!hasDirectApply) return 0;
-  if (confidence >= 90) return 10;
-  if (confidence >= 70) return 6;
-  return 3;
+  return 0;
 }
 
 function applyDirectApplicationAdjustment(jobs = []) {
   return jobs
     .map((job) => {
-      const penalty = directApplyPenalty(job);
-      const boost = directApplyBoost(job);
+      const adjustment = directApplyAdjustment(job);
       const originalScore = Number(job.score || 0);
 
       return {
         ...job,
         originalScore,
-        directApplyPenalty: penalty,
-        directApplyBoost: boost,
-        score: Math.max(0, originalScore - penalty + boost),
+        directApplyAdjustment: adjustment,
+        score: Math.max(0, originalScore + adjustment),
         applyUrlAvailable: isDirectApplyUrl(job.applyUrl),
       };
     })
@@ -110,11 +105,11 @@ export default async function handler(req, res) {
     const returnedJobs = finalRankedJobs.slice(0, 50);
 
     return res.status(200).json({
-      source: "live-retrieval-openai-embedding-ranking-strong-company-ats-enrichment",
+      source: "live-retrieval-openai-embedding-ranking-company-careers-fallback",
       rankingMethod:
-        "OpenAI embedding ranking plus strong company/ATS direct-apply enrichment adjustment",
+        "OpenAI embedding ranking plus company/ATS/careers-page link enrichment",
       enrichmentMethod:
-        "Provider direct links, redirect resolution, Greenhouse API, Lever API, exact company job search, and company careers page crawl",
+        "Provider direct links, redirect resolution, Greenhouse API, Lever API, exact company job search, company careers page search, and company careers page fallback",
       jobs: returnedJobs,
       titleScores: ranked.titleScores,
       meta: {
@@ -124,13 +119,13 @@ export default async function handler(req, res) {
         rankedCount: ranked.jobs.length,
         enrichedCount: enrichedJobs.length,
         returnedCount: returnedJobs.length,
-        enrichedApplyLinks: enrichedJobs.filter((job) => isDirectApplyUrl(job.applyUrl)).length,
-        directHighConfidenceApplyLinks: enrichedJobs.filter(
-          (job) => isDirectApplyUrl(job.applyUrl) && Number(job.applyUrlConfidence || 0) >= 70
+        directRoleApplyLinks: enrichedJobs.filter(
+          (job) => isDirectApplyUrl(job.applyUrl) && job.applyLinkType === "direct-role"
         ).length,
-        adzunaWithoutDirectApplyPenalized: enrichedJobs.filter(
-          (job) => isAdzunaJob(job) && !isDirectApplyUrl(job.applyUrl)
+        companyCareerFallbackLinks: enrichedJobs.filter(
+          (job) => isDirectApplyUrl(job.applyUrl) && job.applyLinkIsFallbackCareerPage
         ).length,
+        aggregatorLinksSuppressed: enrichedJobs.filter((job) => !isDirectApplyUrl(job.applyUrl)).length,
         minimumTargetResults: 50,
         providerErrors: retrieved.providerErrors || [],
         env: {
